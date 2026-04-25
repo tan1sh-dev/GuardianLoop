@@ -2,7 +2,14 @@
 Scout — static analysis agent.
 
 Runs Semgrep on any supported file and Bandit on Python files, in parallel.
-Emits deduplicated ``Finding`` objects with stable ids.
+Emits ``Finding`` objects with stable ids and explicit (file, line) dedup.
+
+Semgrep rule pack is language-aware:
+    * .cpp / .c / .cc / .cxx / .h / .hh / .hpp  →  ``p/cpp``
+    * .py                                       →  ``p/python``
+
+If Semgrep or Bandit is not installed (FileNotFoundError on exec), the
+respective tool is skipped with a warning and the scan still completes.
 """
 
 from __future__ import annotations
@@ -19,7 +26,11 @@ from guardianloop.config import Config
 from guardianloop.logging_setup import get_agent_logger
 from guardianloop.state import Finding, Language, PipelineState, Severity, Tool
 
-SEMGREP_CONFIG = "p/default"
+# Semgrep registry packs, picked per-language so we don't pay for irrelevant rules.
+_SEMGREP_PACKS: dict[Language, str] = {
+    "cpp": "p/cpp",
+    "python": "p/python",
+}
 
 _SEVERITY_MAP: dict[str, Severity] = {
     "ERROR": "HIGH",
@@ -29,6 +40,26 @@ _SEVERITY_MAP: dict[str, Severity] = {
     "MEDIUM": "MEDIUM",
     "LOW": "LOW",
     "CRITICAL": "CRITICAL",
+}
+
+# Fallback CWE mapping for Bandit test ids that don't expose `issue_cwe`
+# in older bandit versions or community plugins. Extend as needed.
+_BANDIT_CWE_FALLBACK: dict[str, str] = {
+    "B102": "CWE-78",   # exec_used
+    "B301": "CWE-502",  # pickle
+    "B303": "CWE-327",  # MD5/SHA1
+    "B304": "CWE-327",  # weak ciphers
+    "B305": "CWE-327",  # weak cipher modes
+    "B306": "CWE-377",  # mktemp_q
+    "B307": "CWE-78",   # eval
+    "B324": "CWE-327",  # hashlib insecure
+    "B501": "CWE-295",  # request without verify
+    "B506": "CWE-20",   # yaml_load
+    "B602": "CWE-78",   # subprocess shell=True
+    "B603": "CWE-78",   # subprocess without shell
+    "B605": "CWE-78",   # start_process_with_a_shell
+    "B608": "CWE-89",   # SQL injection
+    "B609": "CWE-78",   # linux commands wildcard
 }
 
 
@@ -65,27 +96,50 @@ def _normalize_severity(s: str) -> Severity:
     return _SEVERITY_MAP.get(s.upper(), "INFO")
 
 
-async def _run_semgrep(source: Path, timeout: int, language: Language) -> list[Finding]:
-    proc = await asyncio.create_subprocess_exec(
-        "semgrep",
-        "scan",
-        f"--config={SEMGREP_CONFIG}",
-        "--json",
-        "--quiet",
-        "--metrics=off",
-        str(source),
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+async def _run_semgrep(
+    source: Path,
+    timeout: int,
+    language: Language,
+    logger,
+) -> list[Finding]:
+    pack = _SEMGREP_PACKS.get(language)
+    if pack is None:
+        logger.info("scout.semgrep_skip_unsupported_language", language=language)
+        return []
+
     try:
-        stdout_b, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        proc = await asyncio.create_subprocess_exec(
+            "semgrep",
+            "scan",
+            f"--config={pack}",
+            "--json",
+            "--quiet",
+            "--metrics=off",
+            str(source),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except FileNotFoundError:
+        logger.warning("scout.semgrep_not_installed")
+        return []
+
+    try:
+        stdout_b, stderr_b = await asyncio.wait_for(
+            proc.communicate(), timeout=timeout
+        )
     except asyncio.TimeoutError:
         proc.kill()
         await proc.wait()
+        logger.warning("scout.semgrep_timeout", timeout=timeout)
         return []
+
     try:
         data = json.loads(stdout_b.decode("utf-8", errors="replace") or "{}")
     except json.JSONDecodeError:
+        logger.warning(
+            "scout.semgrep_bad_json",
+            stderr=stderr_b.decode("utf-8", errors="replace")[:500],
+        )
         return []
 
     findings: list[Finding] = []
@@ -101,6 +155,9 @@ async def _run_semgrep(source: Path, timeout: int, language: Language) -> list[F
             cwe_id = _extract_cwe(str(cwe_raw[0]))
         elif isinstance(cwe_raw, str):
             cwe_id = _extract_cwe(cwe_raw)
+        # Some rules embed CWE in the rule id itself (e.g. "test.cwe121.foo").
+        if cwe_id is None:
+            cwe_id = _extract_cwe(rule_id) or _extract_cwe(str(rule_id).upper())
         severity = _normalize_severity(str(extra.get("severity") or "INFO"))
         findings.append(
             Finding(
@@ -120,25 +177,38 @@ async def _run_semgrep(source: Path, timeout: int, language: Language) -> list[F
     return findings
 
 
-async def _run_bandit(source: Path, timeout: int) -> list[Finding]:
-    proc = await asyncio.create_subprocess_exec(
-        "bandit",
-        "-f",
-        "json",
-        "-q",
-        str(source),
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+async def _run_bandit(source: Path, timeout: int, logger) -> list[Finding]:
     try:
-        stdout_b, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        proc = await asyncio.create_subprocess_exec(
+            "bandit",
+            "-f",
+            "json",
+            "-q",
+            str(source),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except FileNotFoundError:
+        logger.warning("scout.bandit_not_installed")
+        return []
+
+    try:
+        stdout_b, stderr_b = await asyncio.wait_for(
+            proc.communicate(), timeout=timeout
+        )
     except asyncio.TimeoutError:
         proc.kill()
         await proc.wait()
+        logger.warning("scout.bandit_timeout", timeout=timeout)
         return []
+
     try:
         data = json.loads(stdout_b.decode("utf-8", errors="replace") or "{}")
     except json.JSONDecodeError:
+        logger.warning(
+            "scout.bandit_bad_json",
+            stderr=stderr_b.decode("utf-8", errors="replace")[:500],
+        )
         return []
 
     findings: list[Finding] = []
@@ -150,6 +220,8 @@ async def _run_bandit(source: Path, timeout: int) -> list[Finding]:
         issue_cwe = r.get("issue_cwe")
         if isinstance(issue_cwe, dict) and issue_cwe.get("id") is not None:
             cwe_id = f"CWE-{issue_cwe['id']}"
+        elif rule_id in _BANDIT_CWE_FALLBACK:
+            cwe_id = _BANDIT_CWE_FALLBACK[rule_id]
         severity = _normalize_severity(str(r.get("issue_severity") or "LOW"))
         findings.append(
             Finding(
@@ -169,6 +241,37 @@ async def _run_bandit(source: Path, timeout: int) -> list[Finding]:
     return findings
 
 
+def _dedupe(semgrep: list[Finding], bandit: list[Finding]) -> list[Finding]:
+    """
+    Merge Semgrep + Bandit findings, deduplicated by (file_path, line_start).
+
+    Semgrep wins on shared lines because its rule packs carry richer CWE
+    metadata. Within a single tool we still drop exact-id duplicates.
+    """
+    seen_lines: set[tuple[str, int]] = set()
+    seen_ids: set[str] = set()
+    merged: list[Finding] = []
+
+    for f in semgrep:
+        if f.id in seen_ids:
+            continue
+        seen_ids.add(f.id)
+        seen_lines.add((f.file_path, f.line_start))
+        merged.append(f)
+
+    for f in bandit:
+        if f.id in seen_ids:
+            continue
+        if (f.file_path, f.line_start) in seen_lines:
+            # Same line already covered by Semgrep — drop the duplicate.
+            continue
+        seen_ids.add(f.id)
+        seen_lines.add((f.file_path, f.line_start))
+        merged.append(f)
+
+    return merged
+
+
 async def scout_node(state: PipelineState, config: RunnableConfig) -> dict:
     gl: Config = config["configurable"]["gl_config"]
     logger = get_agent_logger(state.run_dir, "scout")
@@ -177,25 +280,35 @@ async def scout_node(state: PipelineState, config: RunnableConfig) -> dict:
     language = _detect_language(source)
     logger.info("scout.start", file=str(source), language=language)
 
-    tasks = [_run_semgrep(source, gl.scout_timeout_seconds, language)]
-    if language == "python":
-        tasks.append(_run_bandit(source, gl.scout_timeout_seconds))
+    semgrep_task = _run_semgrep(source, gl.scout_timeout_seconds, language, logger)
+    bandit_task = (
+        _run_bandit(source, gl.scout_timeout_seconds, logger)
+        if language == "python"
+        else None
+    )
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    findings: list[Finding] = []
-    for r in results:
-        if isinstance(r, Exception):
-            logger.warning("scout.tool_error", error=str(r))
-        else:
-            findings.extend(r)
+    if bandit_task is not None:
+        semgrep_results, bandit_results = await asyncio.gather(
+            semgrep_task, bandit_task, return_exceptions=True
+        )
+    else:
+        semgrep_results = await asyncio.gather(semgrep_task, return_exceptions=True)
+        semgrep_results = semgrep_results[0]
+        bandit_results = []
 
-    seen: set[str] = set()
-    deduped: list[Finding] = []
-    for f in findings:
-        if f.id in seen:
-            continue
-        seen.add(f.id)
-        deduped.append(f)
+    if isinstance(semgrep_results, Exception):
+        logger.warning("scout.semgrep_error", error=str(semgrep_results))
+        semgrep_results = []
+    if isinstance(bandit_results, Exception):
+        logger.warning("scout.bandit_error", error=str(bandit_results))
+        bandit_results = []
 
-    logger.info("scout.done", findings=len(deduped))
+    deduped = _dedupe(semgrep_results, bandit_results)
+
+    logger.info(
+        "scout.done",
+        findings=len(deduped),
+        semgrep=len(semgrep_results),
+        bandit=len(bandit_results),
+    )
     return {"findings": deduped, "language": language, "status": "classifying"}

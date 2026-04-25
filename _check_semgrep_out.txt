@@ -1,0 +1,18 @@
+rc=2
+STDERR (first 1500):
+RPC input error: Expected a number, got ''
+RPC subprocess exited with code 1
+Failed to validate semgrep configuration
+               
+               
+┌─────────────┐
+│ Scan Status │
+└─────────────┘
+  Scanning 1 file tracked by git with 1059 Code rules:
+  Scanning 1 file with 47 <multilang> rules.
+semgrep-core exited with 1!
+RPC input error: Expected a number, got ''
+RPC subprocess exited with code 1
+
+
+STDOUT len: 25

@@ -1,0 +1,13 @@
+rules:
+  - id: cwe-78-os-system
+    patterns:
+      - pattern: os.system($CMD)
+      - pattern: subprocess.call($CMD, shell=True)
+      - pattern: subprocess.run($CMD, shell=True)
+    message: >
+      CWE-78: OS Command Injection. User input passed to shell.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: CWE-78
+      confidence: HIGH
