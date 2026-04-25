@@ -1,0 +1,24 @@
+# Gemini models — Fixer stays on Pro; Classifier can be routed to Flash for rate relief.
+model_name: "gemini-2.5-pro"
+fixer_model: "gemini-2.5-pro"
+classifier_model: "gemini-2.5-flash"
+
+# Pipeline bounds
+max_loop_iterations: 3
+
+# Timeouts (seconds)
+scout_timeout_seconds: 60
+gemini_timeout_seconds: 120
+sandbox_timeout_seconds: 30
+nvd_timeout_seconds: 10
+
+# Sandbox images (built via `make docker-build`)
+python_sandbox_image: "guardianloop/python-sandbox:latest"
+cpp_sandbox_image: "guardianloop/cpp-sandbox:latest"
+
+# NVD API rate limits per 30s window
+nvd_rate_limit_without_key: 5
+nvd_rate_limit_with_key: 50
+
+# Output
+runs_dir: "./runs"
