@@ -93,6 +93,9 @@ async def test_graph_reaches_report_node_when_patch_holds(
     monkeypatch.setattr("google.genai.Client", lambda *a, **k: fake_client)
 
     monkeypatch.setattr(
+        "guardianloop.agents.red_team.is_docker_available", lambda image: True
+    )
+    monkeypatch.setattr(
         "guardianloop.agents.red_team.run_exploit_in_sandbox",
         lambda **kw: {
             "exploit_reproduced": False,
@@ -193,6 +196,9 @@ async def test_graph_loops_when_exploit_keeps_reproducing(
     fake_client.aio.models.generate_content = AsyncMock(side_effect=_make_response)
     monkeypatch.setattr("google.genai.Client", lambda *a, **k: fake_client)
 
+    monkeypatch.setattr(
+        "guardianloop.agents.red_team.is_docker_available", lambda image: True
+    )
     monkeypatch.setattr(
         "guardianloop.agents.red_team.run_exploit_in_sandbox",
         lambda **kw: {

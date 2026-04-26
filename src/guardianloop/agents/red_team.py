@@ -1,20 +1,27 @@
 """
-Red-Team — Docker sandbox exploit verification.
+Red-Team — exploit verification.
 
-For each patch produced at the current iteration, write the patched code + an
-exploit harness into a temp dir, run it in the language-appropriate sandbox
-image, and record whether the exploit still reproduced.
+Primary path: write the patched code + an exploit harness into a temp dir, run
+it inside the language-appropriate sandbox image, and decide whether the
+exploit reproduced via exit-code or AddressSanitizer output.
+
+Fallback path (Day 1 behaviour): if the Docker daemon isn't running or the
+sandbox image isn't built, re-run Scout's SAST tools against the patched code
+and treat any finding with the same CWE as "exploit reproduced".
 """
 
 from __future__ import annotations
 
 import asyncio
+import tempfile
+import time
+from pathlib import Path
 
 from langchain_core.runnables import RunnableConfig
 
 from guardianloop.config import Config
 from guardianloop.logging_setup import get_agent_logger
-from guardianloop.sandbox.docker_runner import run_exploit_in_sandbox
+from guardianloop.sandbox.docker_runner import is_docker_available, run_exploit_in_sandbox
 from guardianloop.state import Finding, PipelineState, VerificationResult
 
 
@@ -23,6 +30,70 @@ def _find_finding(state: PipelineState, finding_id: str) -> Finding | None:
         if ef.finding.id == finding_id:
             return ef.finding
     return None
+
+
+def _suffix_for_language(language: str) -> str:
+    if language == "python":
+        return ".py"
+    if language == "cpp":
+        return ".cpp"
+    return ".txt"
+
+
+async def _scout_rescan(
+    *,
+    finding: Finding,
+    patched_code: str,
+    timeout: int,
+    logger,
+) -> dict:
+    """
+    Re-run Scout's SAST tools against the patched code. If a finding with the
+    same CWE still appears, treat the exploit as reproduced.
+    """
+    # Imported lazily so the module can still be imported in environments where
+    # scout deps (semgrep, bandit) aren't installed.
+    from guardianloop.agents.scout import (
+        _detect_language,
+        _run_bandit,
+        _run_semgrep_with_fallback,
+    )
+
+    suffix = _suffix_for_language(finding.language)
+    start = time.monotonic()
+
+    # delete=False so the file remains readable on Windows while the subprocess runs.
+    fh = tempfile.NamedTemporaryFile(
+        prefix="guardianloop-rescan-", suffix=suffix, mode="w", delete=False, encoding="utf-8"
+    )
+    try:
+        fh.write(patched_code)
+        fh.close()
+        tmp = Path(fh.name)
+        language = _detect_language(tmp)
+
+        semgrep_findings = await _run_semgrep_with_fallback(tmp, timeout, language, logger)
+        bandit_findings = (
+            await _run_bandit(tmp, timeout, logger) if language == "python" else []
+        )
+        all_findings = list(semgrep_findings) + list(bandit_findings)
+        same_cwe = [f for f in all_findings if f.cwe_id == finding.cwe_id]
+        reproduced = bool(same_cwe)
+        return {
+            "exploit_reproduced": reproduced,
+            "stdout": (
+                f"scout_rescan: {len(all_findings)} findings, "
+                f"{len(same_cwe)} matching CWE {finding.cwe_id}"
+            ),
+            "stderr": "",
+            "exit_code": 0,
+            "duration": time.monotonic() - start,
+        }
+    finally:
+        try:
+            Path(fh.name).unlink()
+        except OSError:
+            pass
 
 
 async def red_team_node(state: PipelineState, config: RunnableConfig) -> dict:
@@ -48,21 +119,53 @@ async def red_team_node(state: PipelineState, config: RunnableConfig) -> dict:
             if finding.language == "python"
             else gl.cpp_sandbox_image
         )
-        logger.info(
-            "red_team.verify_start",
-            finding_id=patch.finding_id,
-            iteration=patch.iteration,
-            image=image,
-        )
 
-        result = await asyncio.to_thread(
-            run_exploit_in_sandbox,
-            language=finding.language,
-            image=image,
-            patched_code=patch.patched_code,
-            finding=finding,
-            timeout=gl.sandbox_timeout_seconds,
-        )
+        docker_ok = await asyncio.to_thread(is_docker_available, image)
+
+        if docker_ok:
+            logger.info(
+                "red_team.verify_start",
+                path="docker",
+                finding_id=patch.finding_id,
+                iteration=patch.iteration,
+                image=image,
+            )
+            result = await asyncio.to_thread(
+                run_exploit_in_sandbox,
+                language=finding.language,
+                image=image,
+                patched_code=patch.patched_code,
+                finding=finding,
+                timeout=gl.sandbox_timeout_seconds,
+            )
+            # Belt-and-suspenders: docker_runner returned a not-available signal.
+            if result.get("docker_available") is False:
+                logger.info(
+                    "red_team.docker_unavailable_at_runtime_falling_back",
+                    finding_id=patch.finding_id,
+                    stderr=(result.get("stderr") or "")[:200],
+                )
+                result = await _scout_rescan(
+                    finding=finding,
+                    patched_code=patch.patched_code,
+                    timeout=gl.scout_timeout_seconds,
+                    logger=logger,
+                )
+        else:
+            logger.info(
+                "red_team.verify_start",
+                path="scout_fallback",
+                finding_id=patch.finding_id,
+                iteration=patch.iteration,
+                image=image,
+                reason="docker_unavailable_or_image_missing",
+            )
+            result = await _scout_rescan(
+                finding=finding,
+                patched_code=patch.patched_code,
+                timeout=gl.scout_timeout_seconds,
+                logger=logger,
+            )
 
         verification = VerificationResult(
             finding_id=patch.finding_id,

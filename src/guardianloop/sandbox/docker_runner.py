@@ -26,14 +26,39 @@ from guardianloop.state import Finding
 EXPLOIT_REPRODUCED_EXIT_CODE = 42
 
 
+def is_docker_available(image: str) -> bool:
+    """Return True only if the Docker daemon responds and the requested image exists."""
+    try:
+        import docker
+        from docker.errors import DockerException, ImageNotFound
+    except ImportError:
+        return False
+    try:
+        client = docker.from_env()
+        client.ping()
+        client.images.get(image)
+    except ImageNotFound:
+        return False
+    except DockerException:
+        return False
+    except Exception:
+        return False
+    return True
+
+
+def _write_lf(path: Path, content: str) -> None:
+    """Write text with explicit LF endings — bash inside the Linux sandbox chokes on CRLF."""
+    path.write_bytes(content.replace("\r\n", "\n").encode("utf-8"))
+
+
 def _write_workdir(workdir: Path, language: str, patched_code: str, finding: Finding) -> None:
     if language == "python":
-        (workdir / "target.py").write_text(patched_code, encoding="utf-8")
-        (workdir / "run.sh").write_text(python_runner_script(), encoding="utf-8")
+        _write_lf(workdir / "target.py", patched_code)
+        _write_lf(workdir / "run.sh", python_runner_script())
     else:
-        (workdir / "target.cpp").write_text(patched_code, encoding="utf-8")
-        (workdir / "run.sh").write_text(cpp_runner_script(), encoding="utf-8")
-    (workdir / "exploit_input").write_text(build_exploit_input(finding), encoding="utf-8")
+        _write_lf(workdir / "target.cpp", patched_code)
+        _write_lf(workdir / "run.sh", cpp_runner_script())
+    _write_lf(workdir / "exploit_input", build_exploit_input(finding))
 
 
 def run_exploit_in_sandbox(
@@ -59,6 +84,7 @@ def run_exploit_in_sandbox(
             "stderr": f"Docker daemon not available: {e}",
             "exit_code": -1,
             "duration": 0.0,
+            "docker_available": False,
         }
 
     with tempfile.TemporaryDirectory(prefix="guardianloop-") as tdir:
@@ -77,7 +103,7 @@ def run_exploit_in_sandbox(
                 volumes={str(workdir): {"bind": "/sandbox", "mode": "ro"}},
                 network_mode="none",
                 read_only=True,
-                tmpfs={"/tmp": "rw,size=128m,mode=1777"},
+                tmpfs={"/tmp": "rw,exec,size=128m,mode=1777"},
                 mem_limit="512m",
                 nano_cpus=1_000_000_000,
                 cap_drop=["ALL"],
@@ -95,6 +121,7 @@ def run_exploit_in_sandbox(
                 ),
                 "exit_code": -1,
                 "duration": time.monotonic() - start,
+                "docker_available": False,
             }
         except APIError as e:
             return {
@@ -103,6 +130,7 @@ def run_exploit_in_sandbox(
                 "stderr": f"Docker API error: {e}",
                 "exit_code": -1,
                 "duration": time.monotonic() - start,
+                "docker_available": False,
             }
 
         try:
@@ -133,11 +161,14 @@ def run_exploit_in_sandbox(
                 pass
 
         duration = time.monotonic() - start
-        reproduced = exit_code == EXPLOIT_REPRODUCED_EXIT_CODE
+        reproduced = exit_code == EXPLOIT_REPRODUCED_EXIT_CODE or (
+            "ERROR: AddressSanitizer" in stderr
+        )
         return {
             "exploit_reproduced": reproduced,
             "stdout": stdout,
             "stderr": stderr,
             "exit_code": exit_code,
             "duration": duration,
+            "docker_available": True,
         }

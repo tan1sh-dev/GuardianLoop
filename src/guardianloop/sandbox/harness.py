@@ -17,11 +17,11 @@ def build_exploit_input(finding: Finding) -> str:
     """Produce a malicious stdin payload appropriate to the finding's CWE."""
     cwe = finding.cwe_id
     if cwe in {"CWE-121", "CWE-787"}:
-        return "A" * 1024 + "\n"
+        return "A" * 200 + "\n"
     if cwe == "CWE-89":
-        return "admin' OR '1'='1\n"
+        return "' OR '1'='1\n"
     if cwe == "CWE-78":
-        return "; cat /etc/passwd\n"
+        return "; echo PWNED\n"
     if cwe == "CWE-79":
         return "<script>alert(1)</script>\n"
     return ""
@@ -69,9 +69,15 @@ rc=$?
 cat /tmp/stdout
 cat /tmp/stderr 1>&2
 
-# The samples print GUARDIANLOOP_EXPLOIT_SUCCESS when an attack succeeds.
-# A patched version of the file must not print it.
+# Exploit signals:
+#   - Samples print GUARDIANLOOP_EXPLOIT_SUCCESS when an attack succeeds.
+#   - "PWNED" indicates the CWE-78 command-injection payload (; echo PWNED) ran.
+#   - SQL-injection success is signalled by the target leaking >1 row.
 if grep -q "GUARDIANLOOP_EXPLOIT_SUCCESS" /tmp/stdout /tmp/stderr; then
+    echo "GUARDIANLOOP_RESULT: exploit_reproduced"
+    exit 42
+fi
+if grep -q "PWNED" /tmp/stdout; then
     echo "GUARDIANLOOP_RESULT: exploit_reproduced"
     exit 42
 fi
