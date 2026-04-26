@@ -1,6 +1,6 @@
 # Gemini models — Fixer stays on Pro; Classifier can be routed to Flash for rate relief.
-model_name: "gemini-2.5-pro"
-fixer_model: "gemini-2.5-pro"
+model_name: "gemini-2.5-flash"
+fixer_model: "gemini-2.5-flash"
 classifier_model: "gemini-2.5-flash"
 
 # Pipeline bounds
