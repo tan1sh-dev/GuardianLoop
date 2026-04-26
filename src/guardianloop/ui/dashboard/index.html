@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cyber">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GuardianLoop · Mission Control</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Fraunces:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body, #root { margin: 0; padding: 0; min-height: 100vh; }
+    body {
+      background: var(--bg, #06070b);
+      color: var(--text, #e8ecff);
+      font-family: var(--fontUI, "Inter", system-ui, sans-serif);
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    button { font: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+
+    /* Animations referenced from the design (gl-blink, gl-pulse, gl-ring, gl-fade). */
+    @keyframes gl-blink { 0%, 60% { opacity: 1; } 70%, 100% { opacity: 0.15; } }
+    @keyframes gl-pulse {
+      0%   { transform: scale(1);   opacity: 1;   }
+      50%  { transform: scale(1.4); opacity: 0.4; }
+      100% { transform: scale(1);   opacity: 1;   }
+    }
+    @keyframes gl-ring {
+      0%   { transform: scale(1);    opacity: 0.55; }
+      100% { transform: scale(1.18); opacity: 0;    }
+    }
+    @keyframes gl-fade {
+      from { opacity: 0; transform: translateY(2px); }
+      to   { opacity: 1; transform: translateY(0);   }
+    }
+
+    ::selection { background: color-mix(in oklab, var(--accent) 40%, transparent); }
+
+    /* Cyber-grid backdrop wash so the dashboard reads "mission control" before React mounts. */
+    body::before {
+      content: "";
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(circle at 20% 0%, color-mix(in oklab, var(--accent) 10%, transparent), transparent 50%),
+        radial-gradient(circle at 100% 100%, color-mix(in oklab, var(--accent2) 8%, transparent), transparent 55%);
+    }
+    #root { position: relative; z-index: 1; }
+
+    /* Initial loader — shown until React mounts. */
+    .gl-boot {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 14px; background: var(--bg, #06070b); z-index: 9999;
+      font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px;
+      color: var(--textMute, #525a82); letter-spacing: 1.2px; text-transform: uppercase;
+    }
+    .gl-boot svg { animation: gl-pulse 1.6s infinite; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="gl-boot">
+      <svg width="42" height="42" viewBox="0 0 24 24" fill="none"
+           stroke="#c084fc" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z" />
+        <path d="M9 12l2 2 4-4" />
+      </svg>
+      <span>booting mission control…</span>
+    </div>
+  </div>
+
+  <!-- React + ReactDOM 18 (UMD) + Babel standalone for in-browser JSX. -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Design files load in dependency order; each one attaches its public
+       symbols to window via Object.assign so the next can reference them. -->
+  <script type="text/babel" data-presets="react" src="data.jsx"></script>
+  <script type="text/babel" data-presets="react" src="ui-kit.jsx"></script>
+  <script type="text/babel" data-presets="react" src="live-scan.jsx"></script>
+  <script type="text/babel" data-presets="react" src="screens.jsx"></script>
+  <script type="text/babel" data-presets="react" src="learning.jsx"></script>
+  <script type="text/babel" data-presets="react" src="app.jsx"></script>
+
+  <!-- Hydrate from /api/runs (or fall back to mock data) and render the App. -->
+  <script type="text/babel" data-presets="react" src="bootstrap.jsx"></script>
+</body>
+</html>
