@@ -11,8 +11,11 @@ from guardianloop.state import PipelineState
 
 
 class _FakeProc:
-    def __init__(self, stdout: bytes) -> None:
+    returncode: int = 0  # required: scout reads proc.returncode after communicate()
+
+    def __init__(self, stdout: bytes, returncode: int = 0) -> None:
         self._stdout = stdout
+        self.returncode = returncode
 
     async def communicate(self):
         return self._stdout, b""
@@ -21,7 +24,7 @@ class _FakeProc:
         pass
 
     async def wait(self) -> int:
-        return 0
+        return self.returncode
 
 
 @pytest.mark.asyncio

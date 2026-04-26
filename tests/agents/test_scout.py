@@ -2,30 +2,27 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-import shutil
-import subprocess
-import tempfile
 from pathlib import Path
 
 import pytest
 
-from guardianloop.agents.scout import _detect_language, scout_node
+from guardianloop.agents.scout import _detect_language, _RULES_DIR, scout_node
 from guardianloop.state import PipelineState
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# Semgrep JSON output for a CWE-121 finding (local-rules metadata style: string, not list).
 SEMGREP_SAMPLE = json.dumps(
     {
         "results": [
             {
-                "check_id": "test.cwe121.strcpy",
+                "check_id": "cwe-121-strcpy-no-bounds",
                 "start": {"line": 12},
                 "end": {"line": 14},
                 "extra": {
                     "severity": "ERROR",
                     "message": "strcpy into fixed buffer",
-                    "metadata": {"cwe": ["CWE-121: Stack-based buffer overflow"]},
+                    "metadata": {"cwe": "CWE-121"},
                 },
             }
         ]
@@ -48,8 +45,13 @@ BANDIT_SAMPLE = json.dumps(
 
 
 class _FakeProc:
-    def __init__(self, stdout: bytes) -> None:
+    """Minimal asyncio.subprocess.Process stand-in for unit tests."""
+
+    returncode: int = 0  # required: _run_semgrep reads proc.returncode after communicate()
+
+    def __init__(self, stdout: bytes, returncode: int = 0) -> None:
         self._stdout = stdout
+        self.returncode = returncode
 
     async def communicate(self):
         return self._stdout, b""
@@ -58,7 +60,12 @@ class _FakeProc:
         pass
 
     async def wait(self) -> int:
-        return 0
+        return self.returncode
+
+
+# ---------------------------------------------------------------------------
+# Unit tests (mocked subprocess)
+# ---------------------------------------------------------------------------
 
 
 def test_detect_language():
@@ -75,15 +82,15 @@ async def test_scout_on_cpp_runs_only_semgrep(tmp_path, monkeypatch, runnable_co
     run_dir = tmp_path / "run"
     run_dir.mkdir()
 
-    captured: dict = {}
+    semgrep_calls: list[tuple] = []
 
     async def fake_exec(*args, **kwargs):
         if args[0] == "semgrep":
-            captured["semgrep_args"] = args
-            return _FakeProc(SEMGREP_SAMPLE)
+            semgrep_calls.append(args)
+            return _FakeProc(SEMGREP_SAMPLE, returncode=0)
         if args[0] == "bandit":
             raise AssertionError("bandit should not run on C++ files")
-        return _FakeProc(b"{}")
+        return _FakeProc(b"{}", returncode=0)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
@@ -97,8 +104,12 @@ async def test_scout_on_cpp_runs_only_semgrep(tmp_path, monkeypatch, runnable_co
     assert f.cwe_id == "CWE-121"
     assert f.tool == "semgrep"
     assert f.severity == "HIGH"
-    # Confirms language-aware pack selection.
-    assert "--config=p/cpp" in captured["semgrep_args"]
+
+    # Semgrep called exactly once — SEMGREP_SAMPLE has findings, no fallback needed.
+    assert len(semgrep_calls) == 1
+    first_call = semgrep_calls[0]
+    # Confirms local rules/ dir is the primary config (not a registry pack).
+    assert any(_RULES_DIR in str(arg) for arg in first_call)
 
 
 @pytest.mark.asyncio
@@ -108,28 +119,105 @@ async def test_scout_on_python_runs_both_tools(tmp_path, monkeypatch, runnable_c
     run_dir = tmp_path / "run"
     run_dir.mkdir()
 
-    calls: list[tuple] = []
+    semgrep_calls: list[tuple] = []
 
     async def fake_exec(*args, **kwargs):
-        calls.append(args)
         if args[0] == "semgrep":
-            return _FakeProc(b'{"results": []}')
+            semgrep_calls.append(args)
+            # Return a finding so no auto-fallback is triggered.
+            return _FakeProc(SEMGREP_SAMPLE, returncode=0)
         if args[0] == "bandit":
-            return _FakeProc(BANDIT_SAMPLE)
-        return _FakeProc(b"{}")
+            return _FakeProc(BANDIT_SAMPLE, returncode=0)
+        return _FakeProc(b"{}", returncode=0)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
     state = PipelineState(source_file=source, run_dir=run_dir)
     update = await scout_node(state, runnable_config)
 
-    tool_names = sorted(c[0] for c in calls)
-    assert tool_names == ["bandit", "semgrep"]
-    # Python files use the python pack.
-    semgrep_args = next(c for c in calls if c[0] == "semgrep")
-    assert "--config=p/python" in semgrep_args
     assert update["language"] == "python"
+    # Semgrep called exactly once (rules/ returned findings → no auto).
+    assert len(semgrep_calls) == 1
+    assert any(_RULES_DIR in str(arg) for arg in semgrep_calls[0])
+    # Bandit finding at line 5 passes through (semgrep finding at line 12).
     assert any(f.tool == "bandit" and f.cwe_id == "CWE-89" for f in update["findings"])
+
+
+@pytest.mark.asyncio
+async def test_scout_auto_fallback_triggered_when_rules_empty(
+    tmp_path, monkeypatch, runnable_config
+):
+    """When rules/ runs cleanly but finds nothing, auto is attempted as secondary."""
+    source = tmp_path / "t.cpp"
+    source.write_text("int main(){return 0;}\n")
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    configs_seen: list[str] = []
+
+    auto_result = json.dumps(
+        {
+            "results": [
+                {
+                    "check_id": "registry.cwe787",
+                    "start": {"line": 1},
+                    "end": {"line": 1},
+                    "extra": {
+                        "severity": "ERROR",
+                        "message": "registry hit",
+                        "metadata": {"cwe": "CWE-787"},
+                    },
+                }
+            ]
+        }
+    ).encode()
+
+    async def fake_exec(*args, **kwargs):
+        config_arg = next((a for a in args if a.startswith("--config=")), "")
+        configs_seen.append(config_arg)
+        if "rules" in config_arg:
+            # rules/ runs clean but finds nothing → returncode 0
+            return _FakeProc(b'{"results": []}', returncode=0)
+        # auto config returns a finding
+        return _FakeProc(auto_result, returncode=0)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    state = PipelineState(source_file=source, run_dir=run_dir)
+    update = await scout_node(state, runnable_config)
+
+    assert len(configs_seen) == 2
+    assert any("rules" in c for c in configs_seen)
+    assert any("auto" in c for c in configs_seen)
+    assert len(update["findings"]) == 1
+    assert update["findings"][0].cwe_id == "CWE-787"
+
+
+@pytest.mark.asyncio
+async def test_scout_regex_fallback_on_semgrep_error(
+    tmp_path, monkeypatch, runnable_config
+):
+    """When Semgrep exits with a non-zero rc (e.g. semgrep-core broken on Windows),
+    the regex scanner reads local YAML rules and produces findings directly."""
+    source = tmp_path / "t.cpp"
+    # Write a line that the cwe121-strcpy.yaml pattern will match.
+    source.write_text("int main(){strcpy(buf, input); return 0;}\n")
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    async def fake_exec(*args, **kwargs):
+        # Simulate semgrep-core failure: non-zero rc, no valid JSON on stdout.
+        return _FakeProc(b"<ERROR: missing output>\r\n", returncode=2)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    state = PipelineState(source_file=source, run_dir=run_dir)
+    update = await scout_node(state, runnable_config)
+
+    findings = update["findings"]
+    assert len(findings) >= 1, "regex fallback should detect strcpy"
+    assert any(f.cwe_id == "CWE-121" for f in findings)
+    assert all(f.tool == "semgrep" for f in findings)
 
 
 @pytest.mark.asyncio
@@ -138,7 +226,7 @@ async def test_scout_dedup_drops_bandit_on_semgrep_line(
 ):
     """Bandit and Semgrep flagging the same line → keep only the Semgrep finding."""
     source = tmp_path / "t.py"
-    source.write_text("import sqlite3\nq = f\"SELECT {x}\"\n")
+    source.write_text('import sqlite3\nq = f"SELECT {x}"\n')
     run_dir = tmp_path / "run"
     run_dir.mkdir()
 
@@ -152,7 +240,7 @@ async def test_scout_dedup_drops_bandit_on_semgrep_line(
                     "extra": {
                         "severity": "ERROR",
                         "message": "f-string SQL",
-                        "metadata": {"cwe": ["CWE-89"]},
+                        "metadata": {"cwe": "CWE-89"},
                     },
                 }
             ]
@@ -174,8 +262,8 @@ async def test_scout_dedup_drops_bandit_on_semgrep_line(
 
     async def fake_exec(*args, **kwargs):
         if args[0] == "semgrep":
-            return _FakeProc(semgrep_at_line2)
-        return _FakeProc(bandit_at_line2)
+            return _FakeProc(semgrep_at_line2, returncode=0)
+        return _FakeProc(bandit_at_line2, returncode=0)
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
 
@@ -191,9 +279,9 @@ async def test_scout_dedup_drops_bandit_on_semgrep_line(
 async def test_scout_returns_empty_when_semgrep_not_installed(
     tmp_path, monkeypatch, runnable_config
 ):
-    """FileNotFoundError on `semgrep` exec → warn and return empty, don't crash."""
+    """FileNotFoundError on semgrep → regex fallback runs; no strcpy in source → empty."""
     source = tmp_path / "t.cpp"
-    source.write_text("int main(){return 0;}\n")
+    source.write_text("int main(){return 0;}\n")  # no strcpy — regex fallback finds nothing
     run_dir = tmp_path / "run"
     run_dir.mkdir()
 
@@ -207,75 +295,54 @@ async def test_scout_returns_empty_when_semgrep_not_installed(
     state = PipelineState(source_file=source, run_dir=run_dir)
     update = await scout_node(state, runnable_config)
 
+    # Regex fallback runs but finds nothing in `int main(){return 0;}`.
     assert update["status"] == "classifying"
     assert update["findings"] == []
 
 
 # ---------------------------------------------------------------------------
-# Real integration test against samples/demo_cwe121.cpp.
+# Real integration test — exercises the full stack on Windows via the
+# three-tier fallback: Semgrep binary → regex scanner → findings.
 #
-# Semgrep-core (the OCaml engine) is not natively supported on Windows; it
-# requires WSL2. We probe at module load and skip with a clear reason if
-# the engine cannot scan C++ on this host.
+# Uses a local fixture with a generous timeout so the Semgrep attempt has
+# time to complete before the regex fallback kicks in.
 # ---------------------------------------------------------------------------
 
 
-def _probe_semgrep_cpp() -> tuple[bool, str]:
-    if shutil.which("semgrep") is None:
-        return False, "semgrep binary not on PATH"
-    with tempfile.NamedTemporaryFile(
-        suffix=".cpp", mode="w", delete=False, encoding="utf-8"
-    ) as tf:
-        tf.write("int main(){return 0;}\n")
-        probe_path = tf.name
-    try:
-        env = os.environ.copy()
-        env["PYTHONIOENCODING"] = "utf-8"
-        p = subprocess.run(
-            [
-                "semgrep", "scan",
-                "--config=p/cpp",
-                "--json", "--quiet", "--metrics=off",
-                probe_path,
-            ],
-            capture_output=True, timeout=180, env=env,
-        )
-    except (subprocess.TimeoutExpired, OSError) as e:
-        return False, f"probe failed: {e}"
-    finally:
-        try:
-            os.unlink(probe_path)
-        except OSError:
-            pass
-    if p.returncode != 0:
-        return False, f"semgrep exited {p.returncode} (likely semgrep-core unavailable)"
-    if not p.stdout.strip().startswith(b"{"):
-        return False, "semgrep produced no JSON output"
-    return True, ""
+@pytest.fixture
+def real_scan_runnable_config():
+    """Generous timeout fixture for tests that spawn real processes."""
+    from guardianloop.config import Config
+
+    cfg = Config(scout_timeout_seconds=30)
+    return {"configurable": {"gl_config": cfg}}
 
 
-_SEMGREP_OK, _SEMGREP_SKIP_REASON = _probe_semgrep_cpp()
-
-
-@pytest.mark.skipif(
-    not _SEMGREP_OK,
-    reason=f"Semgrep cannot scan C++ on this host: {_SEMGREP_SKIP_REASON}",
-)
 @pytest.mark.asyncio
-async def test_scout_real_run_on_demo_cwe121(tmp_path, runnable_config):
-    """End-to-end: run real Semgrep on the bundled CWE-121 demo."""
+async def test_scout_real_run_on_demo_cwe121(tmp_path, real_scan_runnable_config):
+    """
+    End-to-end integration test against samples/demo_cwe121.cpp.
+
+    On platforms where semgrep-core works (Linux/CI), the finding comes from
+    the real Semgrep binary.  On Windows where semgrep-core is broken, the
+    regex fallback reads rules/cwe121-strcpy.yaml and detects the strcpy call
+    directly.  Either way, at least one CWE-121 finding must be returned.
+    """
     source = REPO_ROOT / "samples" / "demo_cwe121.cpp"
     assert source.exists(), f"demo sample missing: {source}"
     run_dir = tmp_path / "run"
     run_dir.mkdir()
 
     state = PipelineState(source_file=source, run_dir=run_dir)
-    update = await scout_node(state, runnable_config)
+    update = await scout_node(state, real_scan_runnable_config)
 
     findings = update["findings"]
-    assert len(findings) >= 1, "Scout produced zero findings on demo_cwe121.cpp"
+    assert len(findings) >= 1, (
+        f"Scout produced zero findings on demo_cwe121.cpp. "
+        f"Semgrep rules dir: {_RULES_DIR}"
+    )
     cwes = [f.cwe_id for f in findings if f.cwe_id]
     assert any(c in {"CWE-121", "CWE-787"} for c in cwes), (
-        f"expected CWE-121 or CWE-787 in findings, got CWEs={cwes} "
+        f"Expected CWE-121 or CWE-787, got: {cwes} "
         f"(rules={[f.rule_id for f in findings]})"
     )
