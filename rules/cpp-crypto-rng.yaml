@@ -1,0 +1,90 @@
+rules:
+
+  # CWE-338: rand() used for security-sensitive purpose
+  - id: cpp-cwe338-rand-security
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      rand() / random() produces a predictable, low-entropy sequence. Using it
+      for tokens, nonces, session IDs, or key material allows an attacker who
+      knows or guesses the seed to predict all outputs (CWE-338).
+      Use a CSPRNG: getrandom(2), /dev/urandom, or BCryptGenRandom on Windows.
+    metadata:
+      cwe: CWE-338
+      owasp: A02:2021
+    patterns:
+      - pattern: rand()
+      - pattern: random()
+      - pattern: drand48()
+      - pattern: lrand48()
+
+  # CWE-338: srand seeded with predictable value (time)
+  - id: cpp-cwe338-srand-time
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      srand(time(NULL)) seeds the PRNG with a second-precision timestamp,
+      making the sequence easily guessable by an attacker who knows
+      approximately when the program started (CWE-338).
+    metadata:
+      cwe: CWE-338
+      owasp: A02:2021
+    patterns:
+      - pattern: srand(time(NULL))
+      - pattern: srand(time(0))
+
+  # CWE-327: MD5 use — broken cryptographic hash
+  - id: cpp-cwe327-md5
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      MD5 is cryptographically broken: collision attacks are practical and
+      preimage resistance is weakened (CWE-327). Do not use MD5 for password
+      hashing, integrity verification, or digital signatures. Use SHA-256 or
+      stronger (SHA-3, BLAKE2).
+    metadata:
+      cwe: CWE-327
+      owasp: A02:2021
+    patterns:
+      - pattern: MD5($DATA, $LEN, $DIGEST)
+      - pattern: MD5_Init(...)
+      - pattern: MD5_Update(...)
+      - pattern: MD5_Final(...)
+      - pattern: EVP_md5()
+
+  # CWE-327: SHA-1 use — deprecated, collision attacks known
+  - id: cpp-cwe327-sha1
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      SHA-1 is deprecated for security use: practical collision attacks have
+      been demonstrated (CWE-327). Replace with SHA-256 or SHA-3 for integrity
+      and digital signatures.
+    metadata:
+      cwe: CWE-327
+      owasp: A02:2021
+    patterns:
+      - pattern: SHA1($DATA, $LEN, $DIGEST)
+      - pattern: SHA1_Init(...)
+      - pattern: SHA1_Update(...)
+      - pattern: SHA1_Final(...)
+      - pattern: EVP_sha1()
+
+  # CWE-798: hardcoded password or secret in string comparison
+  - id: cpp-cwe798-hardcoded-password
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      Comparing a value directly against a hardcoded password string embeds a
+      credential in the binary that can be extracted with strings(1) or a
+      disassembler (CWE-798). Use a secure credential store and constant-time
+      comparison (e.g. CRYPTO_memcmp).
+    metadata:
+      cwe: CWE-798
+      owasp: A07:2021
+    patterns:
+      - pattern: strcmp($INPUT, "password")
+      - pattern: strcmp($INPUT, "admin")
+      - pattern: strcmp($INPUT, "secret")
+      - pattern: strcmp($INPUT, "1234")
+      - pattern: strncmp($INPUT, "password", ...)

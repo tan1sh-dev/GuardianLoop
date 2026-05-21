@@ -1,0 +1,112 @@
+rules:
+
+  # CWE-121 / CWE-242: strcpy — unbounded copy into fixed buffer
+  - id: cpp-cwe121-strcpy
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      strcpy() writes past the end of the destination buffer if the source is
+      longer than the buffer, causing a stack/heap-based buffer overflow (CWE-121).
+      Replace with strncpy(dst, src, sizeof(dst)-1) + explicit null terminator,
+      or use snprintf / std::string.
+    metadata:
+      cwe: CWE-121
+      owasp: A03:2021
+    patterns:
+      - pattern: strcpy($DST, $SRC)
+
+  # CWE-120: strcat — unbounded append with no bounds check
+  - id: cpp-cwe120-strcat
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      strcat() appends without checking whether the combined length fits the
+      destination buffer (CWE-120). Replace with strncat(dst, src, remaining)
+      or std::string.
+    metadata:
+      cwe: CWE-120
+      owasp: A03:2021
+    patterns:
+      - pattern: strcat($DST, $SRC)
+
+  # CWE-242: gets — inherently unsafe, removed from C11/C++14
+  - id: cpp-cwe242-gets
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      gets() reads an unbounded line from stdin with no length limit, making
+      stack-based buffer overflow trivially exploitable (CWE-242). Use
+      fgets(buf, sizeof(buf), stdin) instead.
+    metadata:
+      cwe: CWE-242
+      owasp: A03:2021
+    patterns:
+      - pattern: gets($BUF)
+
+  # CWE-676 / CWE-121: sprintf — unbounded formatted write
+  - id: cpp-cwe676-sprintf
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      sprintf() writes a formatted string without a length limit, allowing the
+      output to overflow the destination buffer (CWE-676 / CWE-121).
+      Replace with snprintf(buf, sizeof(buf), fmt, ...).
+    metadata:
+      cwe: CWE-676
+      owasp: A03:2021
+    patterns:
+      - pattern: sprintf($BUF, ...)
+
+  # CWE-676: vsprintf — same issue as sprintf for va_list callers
+  - id: cpp-cwe676-vsprintf
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      vsprintf() writes a va_list into a buffer without a size limit (CWE-676).
+      Replace with vsnprintf(buf, sizeof(buf), fmt, args).
+    metadata:
+      cwe: CWE-676
+      owasp: A03:2021
+    patterns:
+      - pattern: vsprintf($BUF, $FMT, $ARGS)
+
+  # CWE-120: strncat without correct remaining-size computation
+  # Flag calls where the third argument is the total size, not the remaining space.
+  - id: cpp-cwe120-strncat-full-size
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      strncat(dst, src, sizeof(dst)) passes the total buffer size as the limit
+      rather than the *remaining* space, which can still overflow (CWE-120).
+      The correct form is strncat(dst, src, sizeof(dst) - strlen(dst) - 1).
+    metadata:
+      cwe: CWE-120
+      owasp: A03:2021
+    patterns:
+      - pattern: strncat($DST, $SRC, sizeof($DST))
+
+  # CWE-121: wcscpy — wide-char equivalent of strcpy
+  - id: cpp-cwe121-wcscpy
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      wcscpy() performs an unbounded wide-character copy (CWE-121).
+      Replace with wcsncpy(dst, src, dst_len-1) and null-terminate manually.
+    metadata:
+      cwe: CWE-121
+      owasp: A03:2021
+    patterns:
+      - pattern: wcscpy($DST, $SRC)
+
+  # CWE-120: wcscat — wide-char equivalent of strcat
+  - id: cpp-cwe120-wcscat
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      wcscat() appends wide characters without a length limit (CWE-120).
+      Replace with wcsncat(dst, src, remaining_len).
+    metadata:
+      cwe: CWE-120
+      owasp: A03:2021
+    patterns:
+      - pattern: wcscat($DST, $SRC)

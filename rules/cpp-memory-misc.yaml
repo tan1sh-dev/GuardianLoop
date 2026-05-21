@@ -1,0 +1,94 @@
+rules:
+
+  # CWE-126: strlen used as memcpy length — off-by-one, misses null terminator
+  - id: cpp-cwe126-strlen-memcpy
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      memcpy(dst, src, strlen(src)) copies one byte fewer than needed: it
+      omits the null terminator, leaving the destination string unterminated
+      (CWE-126). Use strlen(src)+1 to include the terminator, or prefer
+      strlcpy / strncpy with an explicit null.
+    metadata:
+      cwe: CWE-126
+      owasp: A03:2021
+    patterns:
+      - pattern: memcpy($DST, $SRC, strlen($SRC))
+
+  # CWE-457: uninitialized stack buffer sent over a socket / written to fd
+  - id: cpp-cwe457-uninit-stack-send
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      A local char buffer is declared and then passed to send()/write() without
+      being fully initialised. Unwritten bytes contain whatever was on the
+      stack, potentially leaking sensitive data (CWE-457).
+      Initialise with memset(buf, 0, sizeof(buf)) or char buf[N] = {0}.
+    metadata:
+      cwe: CWE-457
+      owasp: A03:2021
+    patterns:
+      - pattern: send($FD, $BUF, ...)
+      - pattern: write($FD, $BUF, ...)
+
+  # CWE-415: double-free — free() called twice on the same pointer variable
+  - id: cpp-cwe415-double-free
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      free() is called twice on the same pointer. A double-free corrupts the
+      allocator's internal state and is a well-known exploit primitive (CWE-415).
+      Set the pointer to NULL immediately after the first free() so that a
+      second free(NULL) becomes a safe no-op.
+    metadata:
+      cwe: CWE-415
+      owasp: A03:2021
+    patterns:
+      - pattern: |
+          free($PTR);
+          ...
+          free($PTR);
+
+  # CWE-401: malloc result used via arrow without a NULL check
+  - id: cpp-cwe401-malloc-no-null-check
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      The result of malloc() is dereferenced via -> without a NULL check.
+      malloc() returns NULL on allocation failure; dereferencing NULL is
+      undefined behaviour and may be exploitable (CWE-401 / CWE-476).
+      Always check: if (ptr == NULL) { /* handle */ }
+    metadata:
+      cwe: CWE-401
+      owasp: A03:2021
+    pattern-either:
+      - pattern: |
+          $PTR = malloc($SZ);
+          ...
+          $PTR->$FIELD = $VAL;
+      - pattern: |
+          $PTR = malloc($SZ);
+          ...
+          $RET = $PTR->$FIELD;
+
+  # CWE-416: use-after-free via struct member access after free()
+  - id: cpp-cwe416-use-after-free-arrow
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      A struct member is accessed through a pointer after the pointer has been
+      freed. This is undefined behaviour and a classic use-after-free exploit
+      primitive (CWE-416). Set the pointer to NULL after free() and check
+      before use.
+    metadata:
+      cwe: CWE-416
+      owasp: A03:2021
+    pattern-either:
+      - pattern: |
+          free($PTR);
+          ...
+          $PTR->$FIELD = $VAL;
+      - pattern: |
+          free($PTR);
+          ...
+          $RET = $PTR->$FIELD;

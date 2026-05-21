@@ -1,0 +1,65 @@
+rules:
+
+  # CWE-680 / CWE-190: malloc(n * size) — integer overflow into buffer overflow
+  - id: cpp-cwe680-malloc-overflow
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      malloc(count * element_size) will silently wrap around to a small value
+      if 'count' is large enough to cause integer overflow, allocating a tiny
+      buffer while the code believes it is large (CWE-680 / CWE-190).
+      Use calloc(count, element_size) which detects overflow, or check the
+      multiplication result before calling malloc.
+    metadata:
+      cwe: CWE-680
+      owasp: A03:2021
+    patterns:
+      - pattern: malloc($A * $B)
+      - pattern-not: malloc(sizeof(...) * $B)
+      - pattern-not: malloc($A * sizeof(...))
+
+  # CWE-190: alloca with potentially user-controlled size
+  - id: cpp-cwe190-alloca
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      alloca() allocates memory on the stack without a bounds check. A large
+      or user-controlled size argument can overflow the stack, leading to
+      corruption or denial of service (CWE-190).
+      Use malloc/calloc for dynamic sizes.
+    metadata:
+      cwe: CWE-190
+      owasp: A03:2021
+    patterns:
+      - pattern: alloca($SIZE)
+      - pattern-not: alloca(sizeof(...))
+
+  # CWE-191: signed-to-unsigned conversion used as size (size_t from negative int)
+  - id: cpp-cwe191-negative-size
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      Passing a signed integer as a size_t argument causes implicit
+      sign-extension: a negative value becomes a huge unsigned number,
+      which can trigger enormous allocation or out-of-bounds access (CWE-191).
+      Validate that the value is non-negative before using it as a size.
+    metadata:
+      cwe: CWE-191
+      owasp: A03:2021
+    patterns:
+      - pattern: memcpy($DST, $SRC, (size_t)$N)
+      - pattern-not: memcpy($DST, $SRC, (size_t)sizeof(...))
+
+  # CWE-369: explicit divide-by-zero guard missing — literal 0 divisor
+  - id: cpp-cwe369-divide-by-zero
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      Division by the literal constant 0 or by a variable whose name
+      suggests an unvalidated counter/denominator causes undefined behaviour
+      (CWE-369). Ensure the divisor is non-zero before dividing.
+    metadata:
+      cwe: CWE-369
+      owasp: A05:2021
+    patterns:
+      - pattern: $X / 0

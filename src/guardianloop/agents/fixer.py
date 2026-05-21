@@ -1,12 +1,17 @@
 """
 Fixer — Gemini 2.5 Pro chain-of-thought patch generator.
 
-On iteration 0, all enriched findings get a patch attempt.
+On iteration 0, every enriched finding gets a patch attempt.
 On iteration N>0, only findings whose prior verification still reproduced the
 exploit get re-patched; the failed sandbox output is fed back into the prompt.
 
-Uses the modern `google-genai` SDK (`from google import genai`). The legacy
-`google-generativeai` package is deprecated and must not be used.
+The model is asked to respond with REASONING: / PATCHED_CODE: marker blocks.
+Each finding gets up to two LLM attempts — transient parse or network errors
+trigger one retry. The response parser also accepts a JSON fallback so older
+prompts (and the test fixtures) keep working.
+
+Uses the modern ``google-genai`` SDK (``from google import genai``). The legacy
+``google-generativeai`` package is deprecated and must not be used.
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import difflib
 import json
+import re
 
 from google import genai
 from google.genai import types
@@ -23,26 +29,30 @@ from guardianloop.config import Config
 from guardianloop.logging_setup import get_agent_logger
 from guardianloop.state import EnrichedFinding, Patch, PipelineState, VerificationResult
 
+MAX_ATTEMPTS = 2
+
 FIXER_SYSTEM = (
     "You are GuardianLoop's Fixer agent. Given a vulnerable source file and a "
     "vulnerability finding, produce a minimally-invasive patch that eliminates "
-    "the vulnerability while preserving intended behavior. Respond with JSON only."
+    "the vulnerability while preserving intended behavior. Think step by step."
 )
 
-_INSTRUCTIONS = (
-    "\nThink step by step. Your reasoning_chain must contain, in order:\n"
-    "  1. What the vulnerability is, in one sentence.\n"
-    "  2. Why it is exploitable, with a concrete attack scenario.\n"
-    "  3. What invariant the fix must establish.\n"
-    "  4. The minimum code change to establish that invariant.\n"
-    "  5. What an exploit would need to do to re-trigger the vulnerability, "
-    "so the Red-Team agent knows what to try.\n\n"
-    "Respond with JSON only, matching this schema exactly:\n"
-    "{\n"
-    '  "reasoning_chain": ["step 1 ...", "step 2 ...", "step 3 ...", "step 4 ...", "step 5 ..."],\n'
-    '  "patched_code": "<full replacement contents of the file>"\n'
-    "}\n"
-)
+_INSTRUCTIONS = """
+Respond using exactly these two banner lines, each on its own line, in this order:
+
+REASONING:
+1. What the vulnerability is, in one sentence.
+2. Why it is exploitable, with a concrete attack scenario.
+3. What invariant the fix must establish.
+4. The minimum code change to establish that invariant.
+5. What an exploit would need to do to re-trigger the vulnerability,
+   so the Red-Team agent knows what to try.
+
+PATCHED_CODE:
+<full replacement contents of the file — no fences, no commentary, no diff markers>
+
+The five numbered points are required. Do not wrap PATCHED_CODE in backticks.
+"""
 
 
 def _make_client(api_key: str) -> genai.Client:
@@ -78,9 +88,9 @@ def _build_prompt(
     prior_verif: VerificationResult | None,
 ) -> str:
     """
-    Built via f-strings, NOT str.format(), so that arbitrary contents in
-    ``source`` (Python f-strings, C++ initializer lists, ASan output, etc.)
-    cannot raise KeyError or accidentally interpolate.
+    Built via f-strings, NOT str.format(), so arbitrary contents in ``source``
+    (Python f-strings, C++ initializer lists, ASan output) cannot raise
+    KeyError or accidentally interpolate.
     """
     f = ef.finding
     cvss_score = ef.cvss_score if ef.cvss_score is not None else "unknown"
@@ -113,6 +123,7 @@ def _build_prompt(
 
 
 def _extract_json(text: str) -> dict:
+    """Permissive JSON extractor — bare object, ```json fenced, or plain ``` fenced."""
     text = (text or "").strip()
     if text.startswith("```"):
         newline = text.find("\n")
@@ -124,6 +135,69 @@ def _extract_json(text: str) -> dict:
         if text.lower().startswith("json"):
             text = text[4:].lstrip()
     return json.loads(text)
+
+
+_REASONING_RE = re.compile(
+    r"REASONING:\s*\n(.*?)(?=\nPATCHED_CODE:)",
+    re.DOTALL | re.IGNORECASE,
+)
+_PATCH_RE = re.compile(r"PATCHED_CODE:\s*\n(.*)", re.DOTALL | re.IGNORECASE)
+_NUMBERED_LINE_RE = re.compile(r"^\s*\d+[.)]\s*(.+?)\s*$")
+
+
+def _parse_markers(text: str) -> dict:
+    """Parse a REASONING: / PATCHED_CODE: response into the same shape _extract_json returns."""
+    if not text:
+        raise ValueError("empty response")
+    r = _REASONING_RE.search(text)
+    p = _PATCH_RE.search(text)
+    if not r or not p:
+        raise ValueError("missing REASONING or PATCHED_CODE markers")
+
+    reasoning_block = r.group(1).strip()
+    reasoning: list[str] = []
+    current: list[str] = []
+    for line in reasoning_block.splitlines():
+        m = _NUMBERED_LINE_RE.match(line)
+        if m:
+            if current:
+                reasoning.append(" ".join(current).strip())
+                current = []
+            current.append(m.group(1))
+        elif line.strip() and current:
+            current.append(line.strip())
+    if current:
+        reasoning.append(" ".join(current).strip())
+    if not reasoning:
+        reasoning = [ln.strip() for ln in reasoning_block.splitlines() if ln.strip()]
+
+    patched = p.group(1).strip()
+    # Strip a stray fence if the model added one despite instructions.
+    if patched.startswith("```"):
+        nl = patched.find("\n")
+        if nl != -1:
+            patched = patched[nl + 1 :]
+    if patched.endswith("```"):
+        patched = patched[:-3].rstrip("\r\n")
+
+    return {"reasoning_chain": reasoning, "patched_code": patched}
+
+
+def _parse_response(text: str) -> dict:
+    """Try the markers format first; fall back to JSON for backward compatibility."""
+    raw = (text or "").strip()
+    if not raw:
+        raise ValueError("empty response")
+
+    # Sniff: if the body (past any leading fence) opens with '{', treat as JSON.
+    body = raw
+    if body.startswith("```"):
+        nl = body.find("\n")
+        if nl != -1:
+            body = body[nl + 1 :].lstrip()
+    if body.startswith("{"):
+        return _extract_json(raw)
+    return _parse_markers(raw)
 
 
 def _unified_diff(original: str, patched: str, path: str) -> str:
@@ -144,6 +218,54 @@ def _latest_by_finding(items: list, key: str = "iteration") -> dict:
         if prev is None or getattr(item, key) > getattr(prev, key):
             latest[item.finding_id] = item
     return latest
+
+
+async def _generate_with_retry(
+    *,
+    client: genai.Client,
+    model: str,
+    prompt: str,
+    gen_config: types.GenerateContentConfig,
+    timeout: int,
+    logger,
+    finding_id: str,
+) -> dict:
+    """Up to ``MAX_ATTEMPTS`` Gemini calls per finding. Returns the parsed dict or raises."""
+    last_err: Exception | None = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            resp = await asyncio.wait_for(
+                client.aio.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=gen_config,
+                ),
+                timeout=timeout,
+            )
+            data = _parse_response(resp.text or "")
+            if not data.get("patched_code"):
+                raise ValueError("model produced empty patched_code")
+            return data
+        except Exception as e:  # noqa: BLE001 — we log + retry, then re-raise.
+            last_err = e
+            err_str = str(e)
+            # Parse retry-after hint from 429 responses; fall back to exponential backoff.
+            retry_after = 2 ** attempt
+            import re as _re
+            m = _re.search(r"retry[_ ]in[^\d]*(\d+(?:\.\d+)?)\s*s", err_str, _re.I)
+            if m:
+                retry_after = min(float(m.group(1)), 120)
+            logger.warning(
+                "fixer.attempt_failed",
+                finding_id=finding_id,
+                attempt=attempt,
+                of=MAX_ATTEMPTS,
+                error=err_str,
+                retry_after=retry_after if attempt < MAX_ATTEMPTS else None,
+            )
+            if attempt < MAX_ATTEMPTS:
+                await asyncio.sleep(retry_after)
+    raise last_err if last_err is not None else RuntimeError("fixer: unknown failure")
 
 
 async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
@@ -193,22 +315,26 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
             client = _make_client(gl.google_api_key)
             gen_config = types.GenerateContentConfig(
                 system_instruction=FIXER_SYSTEM,
-                response_mime_type="application/json",
                 temperature=0.2,
             )
 
         try:
-            resp = await asyncio.wait_for(
-                client.aio.models.generate_content(
-                    model=gl.fixer_model,
-                    contents=prompt,
-                    config=gen_config,
-                ),
+            data = await _generate_with_retry(
+                client=client,
+                model=gl.fixer_model,
+                prompt=prompt,
+                gen_config=gen_config,
                 timeout=gl.gemini_timeout_seconds,
+                logger=logger,
+                finding_id=f.id,
             )
-            data = _extract_json(resp.text or "")
-        except Exception as e:
-            logger.error("fixer.llm_error", finding_id=f.id, error=str(e))
+        except Exception as e:  # noqa: BLE001 — surface skips, don't fail the whole run.
+            logger.error(
+                "fixer.gave_up",
+                finding_id=f.id,
+                error=str(e),
+                attempts=MAX_ATTEMPTS,
+            )
             continue
 
         patched_code = data.get("patched_code") or ""

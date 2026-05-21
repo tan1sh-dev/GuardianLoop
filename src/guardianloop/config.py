@@ -42,6 +42,7 @@ class Config(BaseModel):
     google_api_key: str | None = None
     nvd_api_key: str | None = None
     github_webhook_secret: str | None = None
+    semgrep_app_token: str | None = None
 
 
 def load_config(config_path: Path | None = None) -> Config:
@@ -55,4 +56,5 @@ def load_config(config_path: Path | None = None) -> Config:
     data["google_api_key"] = os.getenv("GOOGLE_API_KEY") or None
     data["nvd_api_key"] = os.getenv("NVD_API_KEY") or None
     data["github_webhook_secret"] = os.getenv("GITHUB_WEBHOOK_SECRET") or None
+    data["semgrep_app_token"] = os.getenv("SEMGREP_APP_TOKEN") or None
     return Config(**data)

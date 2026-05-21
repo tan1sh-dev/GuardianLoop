@@ -51,12 +51,9 @@ async def _scout_rescan(
     Re-run Scout's SAST tools against the patched code. If a finding with the
     same CWE still appears, treat the exploit as reproduced.
     """
-    # Imported lazily so the module can still be imported in environments where
-    # scout deps (semgrep, bandit) aren't installed.
     from guardianloop.agents.scout import (
         _detect_language,
-        _run_bandit,
-        _run_semgrep_with_fallback,
+        _run_semgrep,
     )
 
     suffix = _suffix_for_language(finding.language)
@@ -72,11 +69,7 @@ async def _scout_rescan(
         tmp = Path(fh.name)
         language = _detect_language(tmp)
 
-        semgrep_findings = await _run_semgrep_with_fallback(tmp, timeout, language, logger)
-        bandit_findings = (
-            await _run_bandit(tmp, timeout, logger) if language == "python" else []
-        )
-        all_findings = list(semgrep_findings) + list(bandit_findings)
+        all_findings = await _run_semgrep(tmp, timeout, language, None, logger)
         same_cwe = [f for f in all_findings if f.cwe_id == finding.cwe_id]
         reproduced = bool(same_cwe)
         return {

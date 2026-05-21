@@ -4,14 +4,20 @@
 // with a small inline ThemePicker that just calls applyTheme on click.)
 const { useState: uSA, useEffect: uEA } = React;
 
-const NAV = [
-  { id: "overview",  label: "Overview",  icon: "home" },
-  { id: "live",      label: "Live scan", icon: "pulse", badge: "●" },
-  { id: "new",       label: "New scan",  icon: "play" },
-  { id: "scans",     label: "Findings",  icon: "list" },
-  { id: "agents",    label: "Agents",    icon: "layers" },
-  { id: "learning",  label: "Learning",  icon: "book" },
-  { id: "settings",  label: "Settings",  icon: "cog" },
+const NAV_PRIMARY = [
+  { id: "overview", label: "Overview",  icon: "home" },
+  { id: "live",     label: "Live scan", icon: "pulse", badge: "●" },
+  { id: "scans",    label: "Findings",  icon: "list" },
+];
+
+const NAV_SECONDARY = [
+  { id: "new",      label: "New scan",  icon: "play" },
+  { id: "agents",   label: "Agents",    icon: "layers" },
+  { id: "learning", label: "Learning",  icon: "book" },
+];
+
+const NAV_UTILITY = [
+  { id: "settings", label: "Settings", icon: "cog" },
 ];
 
 const DEFAULT_TWEAKS = {
@@ -40,6 +46,30 @@ function App() {
   const containerPad = tweaks.density === "compact" ? "20px 28px" : "32px 40px";
   const sidebarW = 220;
 
+  const sectionLabel = {
+    fontFamily: "var(--fontMono)", fontSize: 9,
+    color: "var(--textMute)", textTransform: "uppercase",
+    letterSpacing: 1.2, padding: "0 10px",
+    marginBottom: 4, marginTop: 2,
+  };
+
+  const navButton = (n, dim) => (
+    <button key={n.id} onClick={() => nav(n.id)} style={{
+      display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
+      background: route === n.id ? "var(--panelAlt)" : "transparent",
+      border: "1px solid",
+      borderColor: route === n.id ? "var(--border)" : "transparent",
+      color: route === n.id ? "var(--text)" : dim ? "var(--textMute)" : "var(--textDim)",
+      fontFamily: "var(--fontUI)", fontSize: 13, fontWeight: 500,
+      borderRadius: 5, cursor: "pointer", textAlign: "left",
+      transition: "all 120ms",
+    }}>
+      <Icon name={n.icon} size={14} />
+      <span style={{ flex: 1 }}>{n.label}</span>
+      {n.badge && <span style={{ color: "var(--accent)", fontSize: 8, animation: "gl-blink 1s infinite" }}>{n.badge}</span>}
+    </button>
+  );
+
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <aside style={{
@@ -67,22 +97,18 @@ function App() {
         </div>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
-          {NAV.map(n => (
-            <button key={n.id} onClick={() => nav(n.id)} style={{
-              display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
-              background: route === n.id ? "var(--panelAlt)" : "transparent",
-              border: "1px solid",
-              borderColor: route === n.id ? "var(--border)" : "transparent",
-              color: route === n.id ? "var(--text)" : "var(--textDim)",
-              fontFamily: "var(--fontUI)", fontSize: 13, fontWeight: 500,
-              borderRadius: 5, cursor: "pointer", textAlign: "left",
-              transition: "all 120ms",
-            }}>
-              <Icon name={n.icon} size={14} />
-              <span style={{ flex: 1 }}>{n.label}</span>
-              {n.badge && <span style={{ color: "var(--accent)", fontSize: 8, animation: "gl-blink 1s infinite" }}>{n.badge}</span>}
-            </button>
-          ))}
+          <div style={sectionLabel}>Primary</div>
+          {NAV_PRIMARY.map(n => navButton(n, false))}
+
+          <div style={{ borderTop: "1px solid var(--border)", margin: "8px 0" }} />
+
+          <div style={sectionLabel}>Tools</div>
+          {NAV_SECONDARY.map(n => navButton(n, true))}
+
+          <div style={{ flex: 1 }} />
+
+          <div style={{ borderTop: "1px solid var(--border)", margin: "4px 0" }} />
+          {NAV_UTILITY.map(n => navButton(n, true))}
         </nav>
 
         <ThemePicker value={tweaks.theme} onChange={v => setTweak("theme", v)} />
@@ -102,8 +128,8 @@ function App() {
 
       <main style={{ flex: 1, padding: containerPad, maxWidth: "calc(100vw - " + sidebarW + "px)", overflowX: "hidden" }}>
         {route === "overview"  && <OverviewScreen onNav={nav} />}
-        {route === "live"      && <LiveScanScreen tweaks={tweaks} onComplete={() => nav("detail")} />}
-        {route === "new"       && <NewScanScreen onStart={() => nav("live")} />}
+        {route === "live"      && <LiveScanScreen tweaks={tweaks} runId={routeArg} onNav={nav} onComplete={(run) => nav("detail", run)} />}
+        {route === "new"       && <NewScanScreen onStart={(runId) => nav("live", runId)} />}
         {route === "scans"     && <FindingsScreen onNav={nav} />}
         {route === "detail"    && <ScanDetailScreen run={routeArg} onNav={nav} />}
         {route === "agents"    && <AgentsScreen />}

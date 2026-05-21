@@ -1,1 +1,1 @@
-"""Streamlit read-only viewer for the latest run."""
+"""UI package — dashboard assets served via web/app.py."""

@@ -1,4 +1,4 @@
-.PHONY: help install test lint format demo docker-build docker-build-python docker-build-cpp ui webhook clean
+.PHONY: help install test lint format demo docker-build docker-build-python docker-build-cpp webhook clean
 
 help:
 	@echo "GuardianLoop targets:"
@@ -8,7 +8,6 @@ help:
 	@echo "  format              run ruff format"
 	@echo "  demo                end-to-end pipeline on samples/demo_cwe121.cpp (smoke test)"
 	@echo "  docker-build        build both sandbox images"
-	@echo "  ui                  launch the Streamlit viewer"
 	@echo "  webhook             launch the FastAPI GitHub webhook server (:8000)"
 	@echo "  clean               remove caches and build artifacts"
 
@@ -25,7 +24,7 @@ format:
 	ruff format src tests
 
 demo:
-	python -m guardianloop.cli samples/demo_cwe121.cpp
+	python -m guardianloop.cli samples/demo_sqli.py
 
 docker-build: docker-build-python docker-build-cpp
 
@@ -34,9 +33,6 @@ docker-build-python:
 
 docker-build-cpp:
 	docker build -f docker/cpp-sandbox.Dockerfile -t guardianloop/cpp-sandbox:latest .
-
-ui:
-	streamlit run src/guardianloop/ui/streamlit_app.py
 
 webhook:
 	uvicorn guardianloop.webhook.app:app --host 0.0.0.0 --port 8000

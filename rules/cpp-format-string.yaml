@@ -1,0 +1,61 @@
+rules:
+
+  # CWE-134: printf with non-literal format string
+  - id: cpp-cwe134-printf-noliteral
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      printf() called with a non-literal format string. If the format string
+      originates from user input, an attacker can exploit %n or read arbitrary
+      stack memory via %s/%x format specifiers (CWE-134).
+      Always use printf("%s", user_input) — never printf(user_input).
+    metadata:
+      cwe: CWE-134
+      owasp: A03:2021
+    patterns:
+      - pattern: printf($FMT, ...)
+      - pattern-not: printf("...", ...)
+
+  # CWE-134: fprintf with non-literal format string
+  - id: cpp-cwe134-fprintf-noliteral
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      fprintf() called with a non-literal format string allows format-string
+      attacks if the format argument is user-controlled (CWE-134).
+      Use fprintf(stream, "%s", user_input) instead.
+    metadata:
+      cwe: CWE-134
+      owasp: A03:2021
+    patterns:
+      - pattern: fprintf($STREAM, $FMT, ...)
+      - pattern-not: fprintf($STREAM, "...", ...)
+
+  # CWE-134: syslog with non-literal format string
+  - id: cpp-cwe134-syslog-noliteral
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      syslog() with a variable format string is exploitable via format-string
+      injection (CWE-134). Use syslog(priority, "%s", message).
+    metadata:
+      cwe: CWE-134
+      owasp: A03:2021
+    patterns:
+      - pattern: syslog($PRI, $FMT, ...)
+      - pattern-not: syslog($PRI, "...", ...)
+
+  # CWE-134: snprintf with non-literal format — still exploitable for reads
+  - id: cpp-cwe134-snprintf-noliteral
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      snprintf() with a non-literal format string can still leak stack memory
+      via %s/%x specifiers even though %n is suppressed on some platforms
+      (CWE-134). Use snprintf(buf, size, "%s", user_input).
+    metadata:
+      cwe: CWE-134
+      owasp: A03:2021
+    patterns:
+      - pattern: snprintf($BUF, $SZ, $FMT, ...)
+      - pattern-not: snprintf($BUF, $SZ, "...", ...)

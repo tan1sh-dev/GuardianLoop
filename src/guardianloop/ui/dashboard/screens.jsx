@@ -1,5 +1,5 @@
 // Overview, Findings, Scan Detail, New Scan, Settings
-const { useState: uS1, useEffect: uE1 } = React;
+const { useState: uS1, useEffect: uE1, useRef: uRef1 } = React;
 
 // ========== OVERVIEW ==========
 const OverviewScreen = ({ onNav }) => {
@@ -66,7 +66,7 @@ const OverviewScreen = ({ onNav }) => {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <Panel title="quick start">
             <div style={{ display: "grid", gap: 8 }}>
-              <Btn primary icon="play" onClick={() => onNav("live")}>Start a new scan</Btn>
+              <Btn primary icon="play" onClick={() => onNav("new")}>Start a new scan</Btn>
               <Btn icon="upload" onClick={() => onNav("new")}>Upload code</Btn>
               <Btn icon="git" onClick={() => onNav("new")}>Scan a GitHub PR</Btn>
             </div>
@@ -321,11 +321,40 @@ const SandboxOutput = ({ exploit, stdout, success }) => (
 );
 
 // ========== NEW SCAN ==========
+const SUPPORTED_EXTS = new Set(["py", "c", "cc", "cpp", "cxx", "h", "hh", "hpp"]);
+
 const NewScanScreen = ({ onStart }) => {
-  const [mode, setMode] = uS1("upload");
-  const [code, setCode] = uS1("");
-  const [pr, setPr] = uS1("");
-  const [drag, setDrag] = uS1(false);
+  const [mode, setMode]       = uS1("upload");
+  const [code, setCode]       = uS1("");
+  const [pr,   setPr]         = uS1("");
+  const [drag, setDrag]       = uS1(false);
+  const [loading, setLoading] = uS1(false);
+  const [error,   setError]   = uS1(null);
+  const fileInputRef          = uRef1(null);
+
+  const startScan = async (url, opts = {}) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await fetch(url, { method: "POST", ...opts });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || `Server error (${r.status})`);
+      onStart(data.run_id);
+    } catch (e) {
+      setError(e.message);
+      setLoading(false);
+    }
+  };
+
+  const handleFile = (file) => {
+    if (!file) return;
+    const ext = file.name.split(".").pop().toLowerCase();
+    if (!SUPPORTED_EXTS.has(ext)) { setError("Unsupported file type — use .py, .c, or .cpp"); return; }
+    if (file.size > 1_048_576)    { setError("File too large (max 1 MB)"); return; }
+    const fd = new FormData();
+    fd.append("file", file);
+    startScan("/api/scan/upload", { body: fd });
+  };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 880 }}>
@@ -336,31 +365,71 @@ const NewScanScreen = ({ onStart }) => {
 
       <div style={{ display: "flex", gap: 6 }}>
         {[
-          { id: "upload", label: "Upload file", icon: "upload" },
-          { id: "paste",  label: "Paste code", icon: "code" },
+          { id: "upload", label: "Upload file",   icon: "upload" },
+          { id: "paste",  label: "Paste code",    icon: "code" },
           { id: "pr",     label: "GitHub PR URL", icon: "git" },
         ].map(m => (
-          <Btn key={m.id} primary={mode === m.id} icon={m.icon} onClick={() => setMode(m.id)}>{m.label}</Btn>
+          <Btn key={m.id} primary={mode === m.id} icon={m.icon}
+               onClick={() => { setMode(m.id); setError(null); }}>
+            {m.label}
+          </Btn>
         ))}
       </div>
 
+      {error && (
+        <div style={{
+          padding: "10px 14px",
+          background: "color-mix(in oklab, var(--danger) 10%, transparent)",
+          border: "1px solid var(--danger)", borderRadius: 5,
+          fontSize: 13, color: "var(--danger)",
+        }}>
+          {error}
+        </div>
+      )}
+
       <Panel padding={20}>
+        {/* ── Upload tab ── */}
         {mode === "upload" && (
-          <div onDragOver={e => { e.preventDefault(); setDrag(true); }}
-               onDragLeave={() => setDrag(false)}
-               onDrop={e => { e.preventDefault(); setDrag(false); }}
-               style={{
-                 border: `1.5px dashed ${drag ? "var(--accent)" : "var(--borderStrong)"}`,
-                 borderRadius: 6, padding: "48px 24px", textAlign: "center",
-                 background: drag ? "color-mix(in oklab, var(--accent) 6%, transparent)" : "var(--panelAlt)",
-                 transition: "all 120ms",
-               }}>
-            <Icon name="upload" size={32} />
-            <div style={{ fontFamily: "var(--fontDisplay)", fontSize: 18, fontWeight: 600, marginTop: 12 }}>Drop a .py or .cpp file here</div>
-            <div style={{ color: "var(--textDim)", fontSize: 13, marginTop: 4 }}>or click to browse · max 1 MB</div>
-            <Btn primary icon="play" onClick={onStart} style={{ marginTop: 18 }}>Use demo · samples/demo_cwe89.py</Btn>
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".py,.c,.cc,.cpp,.cxx,.h,.hh,.hpp"
+              style={{ display: "none" }}
+              onChange={e => handleFile(e.target.files?.[0])}
+            />
+            <div
+              onClick={() => !loading && fileInputRef.current?.click()}
+              onDragOver={e => { e.preventDefault(); setDrag(true); }}
+              onDragLeave={() => setDrag(false)}
+              onDrop={e => {
+                e.preventDefault(); setDrag(false);
+                if (!loading) handleFile(e.dataTransfer.files?.[0]);
+              }}
+              style={{
+                border: `1.5px dashed ${drag ? "var(--accent)" : "var(--borderStrong)"}`,
+                borderRadius: 6, padding: "48px 24px", textAlign: "center",
+                background: drag ? "color-mix(in oklab, var(--accent) 6%, transparent)" : "var(--panelAlt)",
+                transition: "all 120ms", cursor: loading ? "wait" : "pointer",
+              }}>
+              <Icon name="upload" size={32} />
+              <div style={{ fontFamily: "var(--fontDisplay)", fontSize: 18, fontWeight: 600, marginTop: 12 }}>
+                {loading ? "Uploading…" : "Drop a .py or .cpp file here"}
+              </div>
+              <div style={{ color: "var(--textDim)", fontSize: 13, marginTop: 4 }}>
+                {loading ? "Pipeline is starting…" : "or click to browse · max 1 MB"}
+              </div>
+            </div>
+            <div style={{ marginTop: 14, display: "flex", justifyContent: "center" }}>
+              <Btn primary={!loading} icon="play"
+                   onClick={e => { e.stopPropagation(); if (!loading) startScan("/api/scan/demo"); }}>
+                {loading ? "Running…" : "Use demo · samples/demo_sqli.py"}
+              </Btn>
+            </div>
           </div>
         )}
+
+        {/* ── Paste tab ── */}
         {mode === "paste" && (
           <div>
             <textarea value={code} onChange={e => setCode(e.target.value)}
@@ -369,33 +438,57 @@ const NewScanScreen = ({ onStart }) => {
                 width: "100%", height: 280, padding: 14,
                 fontFamily: "var(--fontMono)", fontSize: 13, lineHeight: 1.7,
                 background: "var(--panelAlt)", border: "1px solid var(--border)", color: "var(--text)",
-                borderRadius: 5, outline: "none", resize: "vertical",
+                borderRadius: 5, outline: "none", resize: "vertical", boxSizing: "border-box",
               }} />
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10 }}>
               <div style={{ display: "flex", gap: 6 }}>
                 <Btn ghost onClick={() => setCode(VULN_PY)}>load CWE-89 sample</Btn>
                 <Btn ghost onClick={() => setCode(VULN_CPP)}>load CWE-121 sample</Btn>
               </div>
-              <Btn primary icon="play" onClick={onStart}>Scan now</Btn>
+              <Btn primary={!loading} icon="play" onClick={() => {
+                if (!code.trim()) { setError("Paste some code first."); return; }
+                startScan("/api/scan/paste", {
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ code }),
+                });
+              }}>
+                {loading ? "Running…" : "Scan now"}
+              </Btn>
             </div>
           </div>
         )}
+
+        {/* ── GitHub PR tab ── */}
         {mode === "pr" && (
           <div>
-            <div style={{ fontFamily: "var(--fontMono)", fontSize: 11, color: "var(--textMute)", marginBottom: 6 }}>github pull request url</div>
+            <div style={{ fontFamily: "var(--fontMono)", fontSize: 11, color: "var(--textMute)", marginBottom: 6 }}>
+              github pull request url
+            </div>
             <input value={pr} onChange={e => setPr(e.target.value)}
               placeholder="https://github.com/org/repo/pull/1234"
               style={{
                 width: "100%", padding: "12px 14px",
                 fontFamily: "var(--fontMono)", fontSize: 13,
                 background: "var(--panelAlt)", border: "1px solid var(--border)", color: "var(--text)",
-                borderRadius: 5, outline: "none",
+                borderRadius: 5, outline: "none", boxSizing: "border-box",
               }} />
             <div style={{ marginTop: 10, padding: 12, background: "var(--panelAlt)", border: "1px solid var(--border)", borderRadius: 5, fontSize: 12.5, color: "var(--textDim)" }}>
-              <Icon name="shield" size={12} /> &nbsp;HMAC-validated webhook ingress · scans the PR diff only · posts a check-run comment with the report.
+              <Icon name="shield" size={12} />{" "}
+              Fetches changed <span style={{ fontFamily: "var(--fontMono)", color: "var(--text)" }}>.py / .cpp</span> files via GitHub API ·
+              public repos work without a token · set{" "}
+              <span style={{ fontFamily: "var(--fontMono)", color: "var(--accent)" }}>GITHUB_TOKEN</span>{" "}
+              in <span style={{ fontFamily: "var(--fontMono)", color: "var(--accent)" }}>.env</span> for private repos.
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
-              <Btn primary icon="play" onClick={onStart}>Scan PR</Btn>
+              <Btn primary={!loading} icon="play" onClick={() => {
+                if (!pr.trim()) { setError("Enter a GitHub PR URL."); return; }
+                startScan("/api/scan/pr", {
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ url: pr }),
+                });
+              }}>
+                {loading ? "Fetching PR…" : "Scan PR"}
+              </Btn>
             </div>
           </div>
         )}

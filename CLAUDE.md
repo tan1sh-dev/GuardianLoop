@@ -41,17 +41,26 @@ make test              # pytest
 make lint              # ruff check
 make docker-build      # build the two sandbox images (required for real Red-Team runs)
 make demo              # end-to-end on samples/demo_cwe121.cpp
-make ui                # Streamlit viewer
 make webhook           # FastAPI GitHub webhook on :8000
 ```
+
+Start the Mission Control Dashboard separately (not in Makefile):
+
+```bash
+uvicorn guardianloop.web.app:app --host 0.0.0.0 --port 8080
+```
+
+Then open `http://localhost:8080/dashboard/` in a browser.
+
+Dev server configs are in `.claude/launch.json` — Claude Code's `preview_start` reads from there.
 
 A real `make demo` needs `GOOGLE_API_KEY` set in `.env` and both sandbox images built. Tests mock both.
 
 ## Phased delivery - do not jump ahead
 
-- **Day 1 (current)**: local file path input, both sandbox images, full pipeline, demo smoke test, minimal Streamlit viewer, webhook scaffold with real HMAC.
-- **Day 2**: Streamlit file upload - fill in `ingress/upload.py`.
-- **Day 3**: GitHub PR URL ingress - fill in `ingress/github_pr.py`.
+- **Day 1 (done)**: local file path input, both sandbox images, full pipeline, demo smoke test, Mission Control Dashboard (FastAPI + static JSX at :8080), webhook scaffold with real HMAC.
+- **Day 2**: File upload ingress — fill in `ingress/upload.py`.
+- **Day 3**: GitHub PR URL ingress — fill in `ingress/github_pr.py`.
 
 ## Out of scope
 
@@ -59,7 +68,7 @@ Do not add the following without an explicit product decision:
 - SARIF output
 - Outbound patch-PR creation (Fixer opening a PR back to the source repo)
 - Per-vulnerability Docker images (we use one image per language, harness mounted in at runtime)
-- Per-agent LangGraph state trace UI in Streamlit
+- Per-agent LangGraph state trace UI (the dashboard is read-only run history, not a live trace UI)
 
 If you see an AI assistant suggesting any of these, push back.
 

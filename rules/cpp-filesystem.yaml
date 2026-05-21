@@ -1,0 +1,70 @@
+rules:
+
+  # CWE-22: fopen with user-controlled path — path traversal
+  - id: cpp-cwe22-fopen-user-path
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      fopen() with a user-controlled filename enables path traversal: an
+      attacker can supply "../../../etc/passwd" to read or overwrite arbitrary
+      files (CWE-22). Validate and canonicalise the path with realpath() before
+      use, and ensure it resides within an allowed directory.
+    metadata:
+      cwe: CWE-22
+      owasp: A01:2021
+    patterns:
+      - pattern: fopen($PATH, $MODE)
+      - pattern-not: fopen("...", $MODE)
+
+  # CWE-362: access() — almost always a TOCTOU prelude
+  - id: cpp-cwe362-toctou-access
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      access() checks a file's permissions at a point in time that is separate
+      from any subsequent open()/fopen() call, creating a TOCTOU race condition
+      (CWE-362). An attacker can replace the file between the access() check
+      and the open. Rely on OS-level permissions and open() return values
+      rather than an explicit existence/permission pre-check.
+    metadata:
+      cwe: CWE-362
+      owasp: A09:2021
+    patterns:
+      - pattern: access($PATH, $MODE)
+
+  # CWE-377: tmpnam / tempnam — insecure temp file creation
+  - id: cpp-cwe377-tmpnam
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      tmpnam() and tempnam() return a filename that does not yet exist, but the
+      file is not created atomically. An attacker can create the file between
+      the name lookup and the caller's open(), leading to symlink attacks or
+      information disclosure (CWE-377). Use mkstemp() instead.
+    metadata:
+      cwe: CWE-377
+      owasp: A09:2021
+    patterns:
+      - pattern: tmpnam($BUF)
+      - pattern: tempnam($DIR, $PFX)
+      - pattern: mktemp($TEMPLATE)
+
+  # CWE-732: overly permissive file/directory mode in open/mkdir/chmod
+  - id: cpp-cwe732-world-writable
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      Creating a file or directory with world-writable permissions (mode 0777
+      or 0666) allows any local user to modify or replace the resource, which
+      may lead to privilege escalation or information disclosure (CWE-732).
+      Use 0600 (files) or 0700 (directories) as the default and relax only
+      where necessary.
+    metadata:
+      cwe: CWE-732
+      owasp: A01:2021
+    patterns:
+      - pattern: open($PATH, $FLAGS, 0777)
+      - pattern: open($PATH, $FLAGS, 0666)
+      - pattern: mkdir($PATH, 0777)
+      - pattern: chmod($PATH, 0777)
+      - pattern: chmod($PATH, 0666)

@@ -1,0 +1,78 @@
+rules:
+
+  # CWE-78: system() with non-literal argument — OS command injection
+  - id: cpp-cwe78-system
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      system() passes its argument directly to the shell. If the string is
+      derived from user input, an attacker can inject arbitrary shell commands
+      (CWE-78). Prefer execve() / execvp() with a fixed argv array, or
+      validate and sanitise the input before calling system().
+    metadata:
+      cwe: CWE-78
+      owasp: A03:2021
+    patterns:
+      - pattern: system($CMD)
+      - pattern-not: system("...")
+
+  # CWE-78: popen() with non-literal command string
+  - id: cpp-cwe78-popen
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      popen() opens a shell pipe using the supplied command string. A
+      user-controlled argument enables command injection (CWE-78).
+      Prefer safer alternatives such as execve() with explicit arguments.
+    metadata:
+      cwe: CWE-78
+      owasp: A03:2021
+    patterns:
+      - pattern: popen($CMD, $MODE)
+      - pattern-not: popen("...", $MODE)
+
+  # CWE-78: execlp / execvp with variable executable path
+  - id: cpp-cwe78-execl
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      execlp/execvp resolves the executable name via PATH. If the first
+      argument is user-controlled, an attacker can execute an arbitrary binary
+      (CWE-78). Use the absolute path and validate all arguments.
+    metadata:
+      cwe: CWE-78
+      owasp: A03:2021
+    patterns:
+      - pattern: execlp($CMD, ...)
+      - pattern-not: execlp("...", ...)
+
+  # CWE-89: sqlite3_exec with a non-literal query — SQL injection
+  - id: cpp-cwe89-sqlite3-exec
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      sqlite3_exec() called with a non-literal query string. If the query is
+      built from user input (via sprintf, strcat, etc.) an attacker can inject
+      arbitrary SQL (CWE-89). Use sqlite3_prepare_v2 + sqlite3_bind_* for
+      parameterised queries.
+    metadata:
+      cwe: CWE-89
+      owasp: A03:2021
+    patterns:
+      - pattern: sqlite3_exec($DB, $QUERY, ...)
+      - pattern-not: sqlite3_exec($DB, "...", ...)
+
+  # CWE-89: mysql_query with a non-literal query — SQL injection
+  - id: cpp-cwe89-mysql-query
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      mysql_query() called with a non-literal query string enables SQL injection
+      if the query contains user-supplied data (CWE-89). Use
+      mysql_stmt_prepare / mysql_stmt_bind_param for parameterised queries.
+    metadata:
+      cwe: CWE-89
+      owasp: A03:2021
+    patterns:
+      - pattern: mysql_query($CONN, $QUERY)
+      - pattern-not: mysql_query($CONN, "...")
