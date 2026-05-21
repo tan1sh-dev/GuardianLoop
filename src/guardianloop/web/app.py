@@ -204,6 +204,7 @@ async def get_run(run_id: str) -> dict:
 
     enriched = _safe_read_json(run_dir / "enriched_findings.json") or []
     verifications = _safe_read_json(run_dir / "verifications.json") or []
+    patches = _safe_read_json(run_dir / "patches.json") or []
     report_md = ""
     try:
         rp = run_dir / "report.md"
@@ -217,6 +218,7 @@ async def get_run(run_id: str) -> dict:
         "summary": summary,
         "enriched_findings": enriched,
         "verifications": verifications,
+        "patches": patches,
         "report_md": report_md,
     }
 
@@ -309,6 +311,36 @@ async def get_run_logs(run_id: str) -> dict:
 # ---------- scan submission ----------
 
 _DEMO_FILE = Path(__file__).resolve().parents[3] / "samples" / "demo_sqli.py"
+
+
+@app.post("/api/scan/rerun/{run_id}")
+async def scan_rerun(run_id: str) -> dict:
+    """Re-scan the same source file from an existing run."""
+    _validate_run_id(run_id)
+    old_run_dir = _runs_root() / run_id
+    if not old_run_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"No run {run_id!r}.")
+    summary = _safe_read_json(old_run_dir / "run_summary.json")
+    if not summary:
+        raise HTTPException(status_code=404, detail="Cannot read run summary.")
+    source_raw = summary.get("source_file") or ""
+    if not source_raw:
+        raise HTTPException(status_code=400, detail="Source file path not recorded in summary.")
+    source_path = Path(source_raw)
+    if not source_path.exists():
+        # Fallback: look in the run's own source/ sub-directory
+        candidate = old_run_dir / "source" / source_path.name
+        if candidate.exists():
+            source_path = candidate
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Source file '{source_path.name}' not found on disk.",
+            )
+    cfg = load_config()
+    run_dir = make_run_dir(cfg.runs_dir)
+    _kick(source_path, run_dir)
+    return {"run_id": run_dir.name}
 
 
 @app.post("/api/scan/demo")
