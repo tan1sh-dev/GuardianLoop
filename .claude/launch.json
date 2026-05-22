@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Mission Control Dashboard",
+      "runtimeExecutable": "uvicorn",
+      "runtimeArgs": ["guardianloop.web.app:app", "--host", "0.0.0.0", "--port", "8080"],
+      "port": 8080
+    },
+    {
+      "name": "GitHub Webhook Server",
+      "runtimeExecutable": "uvicorn",
+      "runtimeArgs": ["guardianloop.webhook.app:app", "--host", "0.0.0.0", "--port", "8000"],
+      "port": 8000
+    }
+  ]
+}
