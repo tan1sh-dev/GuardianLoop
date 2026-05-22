@@ -1,6 +1,13 @@
-# Gemini models — Fixer stays on Pro; Classifier can be routed to Flash for rate relief.
-model_name: "gemini-2.5-flash"
-fixer_model: "gemini-2.5-flash"
+# Gemini models.
+#   fixer_model           — primary model the Fixer agent calls.
+#   fixer_fallback_model  — auto-downgrade target when all keys are exhausted
+#                           on the primary model. Set to "" to disable fallback.
+#   classifier_model      — for Classifier's optional LLM enrichment path.
+# Multi-key rotation (GOOGLE_API_KEY_2/_3/... in .env) cycles within each
+# model before the cascade switches to the fallback.
+model_name: "gemini-2.5-pro"
+fixer_model: "gemini-2.5-pro"
+fixer_fallback_model: "gemini-2.5-flash"
 classifier_model: "gemini-2.5-flash"
 
 # Pipeline bounds

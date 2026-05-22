@@ -18,8 +18,12 @@ def isolated_env(monkeypatch):
     """
     monkeypatch.setattr("guardianloop.config.load_dotenv", lambda *a, **k: False)
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEYS", raising=False)
+    for i in range(2, 21):
+        monkeypatch.delenv(f"GOOGLE_API_KEY_{i}", raising=False)
     monkeypatch.delenv("NVD_API_KEY", raising=False)
     monkeypatch.delenv("GITHUB_WEBHOOK_SECRET", raising=False)
+    monkeypatch.delenv("SEMGREP_APP_TOKEN", raising=False)
 
 
 def test_defaults_without_yaml(tmp_path: Path, isolated_env):
@@ -52,3 +56,36 @@ def test_env_picks_up_secrets(tmp_path: Path, monkeypatch):
     assert cfg.google_api_key == "sekret"
     assert cfg.nvd_api_key == "nvd-key"
     assert cfg.github_webhook_secret == "hook"
+
+
+def test_multi_key_rotation_numbered_slots(tmp_path: Path, isolated_env, monkeypatch):
+    """GOOGLE_API_KEY + GOOGLE_API_KEY_2..N collected in order."""
+    monkeypatch.setenv("GOOGLE_API_KEY", "primary")
+    monkeypatch.setenv("GOOGLE_API_KEY_2", "second")
+    monkeypatch.setenv("GOOGLE_API_KEY_3", "third")
+    cfg = load_config(config_path=tmp_path / "none.yaml")
+    assert cfg.google_api_keys == ["primary", "second", "third"]
+    assert cfg.google_api_key == "primary"  # backwards-compat alias
+
+
+def test_multi_key_rotation_bulk_list(tmp_path: Path, isolated_env, monkeypatch):
+    """GOOGLE_API_KEYS=a,b,c collected, whitespace trimmed."""
+    monkeypatch.setenv("GOOGLE_API_KEYS", "alpha, beta ,gamma")
+    cfg = load_config(config_path=tmp_path / "none.yaml")
+    assert cfg.google_api_keys == ["alpha", "beta", "gamma"]
+    assert cfg.google_api_key == "alpha"
+
+
+def test_multi_key_rotation_dedupes(tmp_path: Path, isolated_env, monkeypatch):
+    """Primary + bulk list with overlapping keys → deduplicated."""
+    monkeypatch.setenv("GOOGLE_API_KEY", "shared")
+    monkeypatch.setenv("GOOGLE_API_KEYS", "shared,unique")
+    cfg = load_config(config_path=tmp_path / "none.yaml")
+    assert cfg.google_api_keys == ["shared", "unique"]
+
+
+def test_no_keys_means_empty_list(tmp_path: Path, isolated_env):
+    """No env vars set → both fields are falsy."""
+    cfg = load_config(config_path=tmp_path / "none.yaml")
+    assert cfg.google_api_keys == []
+    assert cfg.google_api_key is None

@@ -54,6 +54,16 @@ def write_json_artifacts(state: PipelineState) -> Path:
     patches_held = sum(1 for v in final_verif.values() if not v.exploit_reproduced)
     patches_failed = sum(1 for v in final_verif.values() if v.exploit_reproduced)
 
+    # Merge in Fixer's token-usage side-channel if it wrote one. Lets the
+    # dashboard display API cost without bloating PipelineState.
+    fixer_usage: dict = {}
+    usage_path = run_dir / "fixer_usage.json"
+    if usage_path.exists():
+        try:
+            fixer_usage = json.loads(usage_path.read_text(encoding="utf-8")) or {}
+        except (OSError, json.JSONDecodeError):
+            fixer_usage = {}
+
     summary = {
         "source_file": str(state.source_file),
         "run_dir": str(run_dir),
@@ -72,6 +82,7 @@ def write_json_artifacts(state: PipelineState) -> Path:
             "findings_unpatched": len(state.enriched_findings)
             - len(final_verif),
         },
+        "fixer_usage": fixer_usage,
     }
     (run_dir / "run_summary.json").write_text(_dump(summary), encoding="utf-8")
     return run_dir / "run_summary.json"

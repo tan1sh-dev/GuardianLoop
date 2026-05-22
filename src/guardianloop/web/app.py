@@ -172,6 +172,25 @@ async def healthz() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/api/system")
+async def system_status() -> dict:
+    """Non-secret system config for dashboard widgets. Never returns key
+    material — only counts, model names, and feature flags."""
+    cfg = load_config()
+    n_keys = len(cfg.google_api_keys or [])
+    return {
+        "fixer_model": cfg.fixer_model,
+        "fixer_fallback_model": cfg.fixer_fallback_model,
+        "classifier_model": cfg.classifier_model,
+        "gemini_keys_configured": n_keys,
+        "nvd_key_configured": bool(cfg.nvd_api_key),
+        "semgrep_token_configured": bool(cfg.semgrep_app_token),
+        "max_loop_iterations": cfg.max_loop_iterations,
+        "sandbox_python_image": cfg.python_sandbox_image,
+        "sandbox_cpp_image": cfg.cpp_sandbox_image,
+    }
+
+
 @app.get("/")
 async def root_redirect() -> RedirectResponse:
     return RedirectResponse(url="/dashboard/")

@@ -124,7 +124,31 @@ const LogStream = ({ logs, currentMs }) => {
 };
 
 // ---------- idle state ----------
-const IdleScreen = ({ onNav }) => (
+const IdleScreen = ({ onNav }) => {
+  const [sys, setSys] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/system")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled) setSys(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // Live-derived status rows from /api/system. Falsy values surface a red dot.
+  const statusRows = sys ? [
+    { label: "fixer",        value: sys.fixer_model,                                 ok: sys.gemini_keys_configured > 0 },
+    { label: "fallback",     value: sys.fixer_fallback_model,                        ok: true },
+    { label: "gemini keys",  value: `${sys.gemini_keys_configured} configured`,      ok: sys.gemini_keys_configured > 0 },
+    { label: "nvd api",      value: sys.nvd_key_configured ? "key set"     : "anon · 5/30s rate cap", ok: true },
+    { label: "semgrep",      value: sys.semgrep_token_configured ? "registry · auth" : "open ruleset",    ok: true },
+    { label: "max loop",     value: `${sys.max_loop_iterations} iterations max`,     ok: true },
+    { label: "sandbox",      value: "--network=none · read-only",                     ok: true },
+  ] : [
+    { label: "system", value: "loading…", ok: true },
+  ];
+
+  return (
   <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
     {/* header */}
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
@@ -177,16 +201,10 @@ const IdleScreen = ({ onNav }) => (
         </div>
       </Panel>
 
-      {/* right — system status */}
+      {/* right — system status (real /api/system data) */}
       <Panel title="system status">
         <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "4px 0" }}>
-          {[
-            { label: "semgrep",  value: "ready · 1.163.0 · WSL",    ok: true  },
-            { label: "docker",   value: "2 containers idle",          ok: true  },
-            { label: "nvd api",  value: "47 / 50 budget",            ok: true  },
-            { label: "fixer",    value: "gemini-2.5-pro",            ok: true  },
-            { label: "sandbox",  value: "--network=none · read-only", ok: true  },
-          ].map(row => (
+          {statusRows.map(row => (
             <div key={row.label} style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
               <div style={{ fontFamily: "var(--fontMono)", fontSize: 12, color: "var(--textDim)" }}>{row.label}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: "var(--fontMono)", fontSize: 11, color: "var(--textMute)", textAlign: "right" }}>
@@ -199,7 +217,8 @@ const IdleScreen = ({ onNav }) => (
       </Panel>
     </div>
   </div>
-);
+  );
+};
 
 // ---------- active scan screen ----------
 const ActiveScanScreen = ({ tweaks, runId, onNav, onComplete }) => {
@@ -286,10 +305,46 @@ const ActiveScanScreen = ({ tweaks, runId, onNav, onComplete }) => {
                                     valueColor={isDone ? "var(--ok)" : "var(--accent)"} />
             <Stat label="findings" value={runSummary?.summary?.totals?.findings ?? "—"} />
             <Stat label="patches"  value={runSummary?.summary?.totals?.patches ?? "—"} />
+            <UsageStats summary={runSummary?.summary} logs={realLogs} />
           </div>
         </Panel>
       </div>
     </div>
+  );
+};
+
+// Token usage + cost estimate — only shows once we have a completed summary or
+// the Fixer has emitted a tokens log line. Pulls from run_summary.fixer_usage.
+const UsageStats = ({ summary, logs }) => {
+  const usage = summary?.fixer_usage;
+  if (!usage || !usage.total_tokens) {
+    // Fall back to streaming estimate from log lines that include "tokens="
+    let streamTokens = 0;
+    for (const l of (logs || [])) {
+      const m = (l.msg || "").match(/tokens=(\d+)/);
+      if (m) streamTokens += parseInt(m[1], 10) || 0;
+    }
+    if (streamTokens === 0) return null;
+    return (
+      <>
+        <Stat label="tokens"  value={streamTokens.toLocaleString()} sub="streaming" />
+      </>
+    );
+  }
+  // Gemini 2.5 Pro pricing (input $1.25/M, output $10/M); Flash much cheaper.
+  // We use a blended midpoint estimate for display only — not authoritative.
+  const cost = (usage.prompt_tokens * 1.25 / 1_000_000)
+             + (usage.completion_tokens * 10.0 / 1_000_000);
+  const modelKeys = Object.keys(usage.by_model || {});
+  const modelLabel = modelKeys.length === 1
+    ? modelKeys[0].replace("gemini-", "")
+    : `${modelKeys.length} models`;
+  return (
+    <>
+      <Stat label="tokens" value={(usage.total_tokens || 0).toLocaleString()}
+            sub={`${usage.calls || 0} api calls`} />
+      <Stat label="est. cost" value={`$${cost.toFixed(4)}`} sub={modelLabel} />
+    </>
   );
 };
 

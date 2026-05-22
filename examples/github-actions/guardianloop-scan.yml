@@ -1,0 +1,150 @@
+# =============================================================================
+# GuardianLoop · GitHub Actions integration template
+# =============================================================================
+# Drop this file into ``.github/workflows/`` of any repo that wants automated
+# security review on every pull request. The workflow runs the full
+# Scout → Classifier → Fixer → Red-Team → Report pipeline against the changed
+# Python / C++ files, then posts a markdown summary back to the PR as a
+# sticky comment.
+#
+# Required repo secrets:
+#   GOOGLE_API_KEY            (required) — Gemini API key for Fixer
+#   GOOGLE_API_KEY_2 / _3 ... (optional) — additional keys for quota rotation
+#   NVD_API_KEY               (optional) — raises CVE lookup rate limit
+#   SEMGREP_APP_TOKEN         (optional) — unlocks full Semgrep ruleset
+#
+# Recommended branch protection:
+#   - Require this workflow to pass before merge
+#   - Block merges when GuardianLoop's "patches_failed" total > 0
+# =============================================================================
+
+name: GuardianLoop Security Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "**/*.py"
+      - "**/*.cpp"
+      - "**/*.cc"
+      - "**/*.h"
+
+# Cancel any in-flight scan when a new commit lands on the same PR.
+concurrency:
+  group: guardianloop-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: Multi-agent security scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      pull-requests: write   # for the sticky comment
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so we can diff against the merge base.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install GuardianLoop
+        run: |
+          python -m pip install --upgrade pip
+          pip install git+https://github.com/your-org/guardianloop.git@main
+
+      - name: Pull sandbox images
+        run: |
+          docker pull ghcr.io/your-org/guardianloop-python-sandbox:latest
+          docker pull ghcr.io/your-org/guardianloop-cpp-sandbox:latest
+
+      - name: Identify changed source files
+        id: changed
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          files=$(git diff --name-only --diff-filter=AM "$base" "$head" \
+                   | grep -E '\.(py|cpp|cc|h)$' || true)
+          echo "files<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$files" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Run GuardianLoop on changed files
+        if: steps.changed.outputs.files != ''
+        env:
+          GOOGLE_API_KEY:    ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_API_KEY_2:  ${{ secrets.GOOGLE_API_KEY_2 }}
+          GOOGLE_API_KEY_3:  ${{ secrets.GOOGLE_API_KEY_3 }}
+          NVD_API_KEY:       ${{ secrets.NVD_API_KEY }}
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p runs
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            echo "::group::Scanning $f"
+            guardianloop scan --file "$f" --runs-dir ./runs || true
+            echo "::endgroup::"
+          done <<< "${{ steps.changed.outputs.files }}"
+
+      - name: Aggregate report
+        if: steps.changed.outputs.files != ''
+        id: report
+        run: |
+          python - <<'PY'
+          import json, os, pathlib
+          rows = []
+          totals = {"findings": 0, "patches_held": 0, "patches_failed": 0}
+          for d in sorted(pathlib.Path("runs").iterdir()):
+              summary_path = d / "run_summary.json"
+              if not summary_path.exists():
+                  continue
+              s = json.loads(summary_path.read_text())
+              t = s.get("totals", {})
+              for k in totals: totals[k] += int(t.get(k, 0) or 0)
+              rows.append(
+                  f"| `{pathlib.Path(s.get('source_file','?')).name}` | "
+                  f"{t.get('findings',0)} | {t.get('patches_held',0)} | "
+                  f"{t.get('patches_failed',0)} |"
+              )
+          body = [
+              "## GuardianLoop security review",
+              "",
+              "| File | findings | patches held | patches failed |",
+              "| --- | ---:| ---:| ---:|",
+              *rows,
+              "",
+              f"**Total:** {totals['findings']} findings · "
+              f"{totals['patches_held']} held · "
+              f"{totals['patches_failed']} failed.",
+          ]
+          pathlib.Path("pr-comment.md").write_text("\n".join(body))
+          print(f"::set-output name=patches_failed::{totals['patches_failed']}")
+          PY
+
+      - name: Post sticky PR comment
+        if: steps.changed.outputs.files != ''
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: pr-comment.md
+          header: guardianloop-summary
+
+      - name: Upload run artifacts
+        if: always() && steps.changed.outputs.files != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: guardianloop-runs
+          path: runs/
+          retention-days: 14
+
+      - name: Fail PR if any patch did not hold
+        if: steps.report.outputs.patches_failed != '' && steps.report.outputs.patches_failed != '0'
+        run: |
+          echo "::error::GuardianLoop verified exploits still reproduce on ${{ steps.report.outputs.patches_failed }} finding(s) after patching."
+          exit 1

@@ -1,14 +1,25 @@
 """
-Fixer — Gemini 2.5 Pro chain-of-thought patch generator.
+Fixer — Gemini chain-of-thought patch generator with multi-key rotation.
 
 On iteration 0, every enriched finding gets a patch attempt.
 On iteration N>0, only findings whose prior verification still reproduced the
 exploit get re-patched; the failed sandbox output is fed back into the prompt.
 
 The model is asked to respond with REASONING: / PATCHED_CODE: marker blocks.
-Each finding gets up to two LLM attempts — transient parse or network errors
-trigger one retry. The response parser also accepts a JSON fallback so older
-prompts (and the test fixtures) keep working.
+The response parser also accepts a JSON fallback so older prompts (and the
+test fixtures) keep working.
+
+Reliability layers, in order of escalation per finding:
+    1. Same key, same model, exponential backoff with jitter (transient 5xx /
+       parse errors).
+    2. Rotate to next API key on 429 quota exhaustion. Exhausted keys are
+       marked for the rest of the run.
+    3. When every key is exhausted on the primary model, downgrade to the
+       fallback model (default gemini-2.5-flash) and retry the full key set.
+    4. If even fallback fails, log and skip the finding — pipeline continues.
+
+Usage budget per run, in API calls (worst case):
+    (n_keys * primary_attempts) + (n_keys * fallback_attempts)
 
 Uses the modern ``google-genai`` SDK (``from google import genai``). The legacy
 ``google-generativeai`` package is deprecated and must not be used.
@@ -19,7 +30,9 @@ from __future__ import annotations
 import asyncio
 import difflib
 import json
+import random
 import re
+from dataclasses import dataclass, field
 
 from google import genai
 from google.genai import types
@@ -29,7 +42,10 @@ from guardianloop.config import Config
 from guardianloop.logging_setup import get_agent_logger
 from guardianloop.state import EnrichedFinding, Patch, PipelineState, VerificationResult
 
-MAX_ATTEMPTS = 2
+# Per-key, per-model attempts before rotating away. Transient errors (parse
+# failure, 5xx, timeout) burn attempts on the same key; quota errors rotate
+# immediately without consuming further attempts on the dead key.
+MAX_ATTEMPTS_PER_KEY = 2
 
 FIXER_SYSTEM = (
     "You are GuardianLoop's Fixer agent. Given a vulnerable source file and a "
@@ -54,6 +70,99 @@ PATCHED_CODE:
 The five numbered points are required. Do not wrap PATCHED_CODE in backticks.
 """
 
+
+# ---------------------------------------------------------------------------
+# Key rotation
+# ---------------------------------------------------------------------------
+
+class QuotaExhaustedError(Exception):
+    """Raised when a 429 indicates the key is out of daily/monthly budget,
+    not just rate-limited. Triggers immediate key rotation."""
+
+
+@dataclass
+class KeyRotator:
+    """
+    Round-robin over a list of API keys with per-key quota tracking.
+
+    A key is "exhausted" once the SDK reports a 429 whose retry-after hint is
+    longer than ``_QUOTA_THRESHOLD_SECONDS`` (5 min) — almost always indicates
+    a daily-quota rejection rather than a transient burst.
+    """
+
+    keys: list[str]
+    _exhausted: set[int] = field(default_factory=set)
+    _cursor: int = 0
+
+    @property
+    def total(self) -> int:
+        return len(self.keys)
+
+    @property
+    def remaining(self) -> int:
+        return len(self.keys) - len(self._exhausted)
+
+    def current(self) -> tuple[int, str] | None:
+        """Return (index, key) for the active key, or None if all exhausted."""
+        if not self.keys:
+            return None
+        for _ in range(len(self.keys)):
+            idx = self._cursor % len(self.keys)
+            if idx not in self._exhausted:
+                return idx, self.keys[idx]
+            self._cursor += 1
+        return None
+
+    def mark_exhausted(self, idx: int) -> None:
+        self._exhausted.add(idx)
+
+    def rotate(self) -> tuple[int, str] | None:
+        """Advance cursor past the current key. Returns next available, or None."""
+        self._cursor += 1
+        return self.current()
+
+
+_QUOTA_THRESHOLD_SECONDS = 300.0  # retry-after > 5 min ⇒ quota, not burst
+_RETRY_AFTER_RE = re.compile(
+    r"retry[_ ]?(?:after|in)[^\d]*(\d+(?:\.\d+)?)\s*s",
+    re.IGNORECASE,
+)
+_QUOTA_HINT_RE = re.compile(
+    r"(?:daily|monthly|per[-_ ]day|free[-_ ]tier|quota[_ ]?exceeded|"
+    r"resource_exhausted|exceeded.+quota)",
+    re.IGNORECASE,
+)
+
+
+def _classify_error(err: Exception) -> tuple[bool, float]:
+    """
+    Returns (is_quota_exhaustion, retry_after_seconds).
+
+    Heuristics on the stringified error:
+      * Contains a quota hint phrase                       → quota exhausted
+      * Contains retry-after > _QUOTA_THRESHOLD_SECONDS    → quota exhausted
+      * Status 429 with no retry hint                      → transient
+      * Otherwise                                          → transient
+    """
+    s = str(err)
+    is_429 = "429" in s or "RESOURCE_EXHAUSTED" in s.upper()
+
+    retry_after = 0.0
+    m = _RETRY_AFTER_RE.search(s)
+    if m:
+        try:
+            retry_after = float(m.group(1))
+        except ValueError:
+            retry_after = 0.0
+
+    if is_429 and (_QUOTA_HINT_RE.search(s) or retry_after > _QUOTA_THRESHOLD_SECONDS):
+        return True, retry_after
+    return False, retry_after
+
+
+# ---------------------------------------------------------------------------
+# Prompt + response
+# ---------------------------------------------------------------------------
 
 def _make_client(api_key: str) -> genai.Client:
     """Single chokepoint for SDK construction so tests can monkeypatch one symbol."""
@@ -220,63 +329,170 @@ def _latest_by_finding(items: list, key: str = "iteration") -> dict:
     return latest
 
 
-async def _generate_with_retry(
+def _extract_usage(resp) -> dict:
+    """Pull token counts off a Gemini response. The exact field names vary
+    between SDK versions, so we probe defensively. Returns {} if unavailable."""
+    usage_obj = getattr(resp, "usage_metadata", None)
+    if usage_obj is None:
+        return {}
+    try:
+        return {
+            "prompt_tokens": int(getattr(usage_obj, "prompt_token_count", 0) or 0),
+            "completion_tokens": int(getattr(usage_obj, "candidates_token_count", 0) or 0),
+            "total_tokens": int(getattr(usage_obj, "total_token_count", 0) or 0),
+        }
+    except (TypeError, ValueError):
+        return {}
+
+
+# ---------------------------------------------------------------------------
+# Generation with rotation + cascade
+# ---------------------------------------------------------------------------
+
+async def _call_once(
     *,
-    client: genai.Client,
+    api_key: str,
     model: str,
+    prompt: str,
+    gen_config: types.GenerateContentConfig,
+    timeout: int,
+) -> tuple[dict, dict]:
+    """One Gemini call. Returns (parsed_response, usage_dict). Raises on failure."""
+    client = _make_client(api_key)
+    resp = await asyncio.wait_for(
+        client.aio.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=gen_config,
+        ),
+        timeout=timeout,
+    )
+    data = _parse_response(resp.text or "")
+    if not data.get("patched_code"):
+        raise ValueError("model produced empty patched_code")
+    return data, _extract_usage(resp)
+
+
+async def _generate_with_rotation(
+    *,
+    rotator: KeyRotator,
+    primary_model: str,
+    fallback_model: str,
     prompt: str,
     gen_config: types.GenerateContentConfig,
     timeout: int,
     logger,
     finding_id: str,
-) -> dict:
-    """Up to ``MAX_ATTEMPTS`` Gemini calls per finding. Returns the parsed dict or raises."""
+) -> tuple[dict, dict]:
+    """
+    Try every key on ``primary_model``; on exhaustion, try every key on
+    ``fallback_model``. Returns (parsed_response, usage_dict) on first success.
+    """
     last_err: Exception | None = None
-    for attempt in range(1, MAX_ATTEMPTS + 1):
-        try:
-            resp = await asyncio.wait_for(
-                client.aio.models.generate_content(
-                    model=model,
-                    contents=prompt,
-                    config=gen_config,
-                ),
-                timeout=timeout,
-            )
-            data = _parse_response(resp.text or "")
-            if not data.get("patched_code"):
-                raise ValueError("model produced empty patched_code")
-            return data
-        except Exception as e:  # noqa: BLE001 — we log + retry, then re-raise.
-            last_err = e
-            err_str = str(e)
-            # Parse retry-after hint from 429 responses; fall back to exponential backoff.
-            retry_after = 2 ** attempt
-            import re as _re
-            m = _re.search(r"retry[_ ]in[^\d]*(\d+(?:\.\d+)?)\s*s", err_str, _re.I)
-            if m:
-                retry_after = min(float(m.group(1)), 120)
-            logger.warning(
-                "fixer.attempt_failed",
-                finding_id=finding_id,
-                attempt=attempt,
-                of=MAX_ATTEMPTS,
-                error=err_str,
-                retry_after=retry_after if attempt < MAX_ATTEMPTS else None,
-            )
-            if attempt < MAX_ATTEMPTS:
-                await asyncio.sleep(retry_after)
-    raise last_err if last_err is not None else RuntimeError("fixer: unknown failure")
 
+    for stage, model in enumerate([primary_model, fallback_model]):
+        # Reset rotator state for the second stage so we re-try keys that were
+        # marked exhausted on Pro — they may still have flash budget.
+        if stage == 1:
+            rotator = KeyRotator(keys=list(rotator.keys))
+            logger.warning(
+                "fixer.model_downgrade",
+                finding_id=finding_id,
+                from_model=primary_model,
+                to_model=fallback_model,
+            )
+
+        current = rotator.current()
+        while current is not None:
+            idx, key = current
+            key_id = f"key#{idx + 1}/{rotator.total}"
+
+            for attempt in range(1, MAX_ATTEMPTS_PER_KEY + 1):
+                try:
+                    logger.info(
+                        "fixer.calling",
+                        finding_id=finding_id,
+                        model=model,
+                        key=key_id,
+                        attempt=attempt,
+                    )
+                    data, usage = await _call_once(
+                        api_key=key,
+                        model=model,
+                        prompt=prompt,
+                        gen_config=gen_config,
+                        timeout=timeout,
+                    )
+                    usage["key_index"] = idx
+                    usage["model"] = model
+                    return data, usage
+
+                except Exception as e:  # noqa: BLE001
+                    last_err = e
+                    is_quota, retry_after = _classify_error(e)
+
+                    if is_quota:
+                        logger.warning(
+                            "fixer.key_exhausted",
+                            finding_id=finding_id,
+                            model=model,
+                            key=key_id,
+                            retry_after=retry_after,
+                            error=str(e)[:200],
+                        )
+                        rotator.mark_exhausted(idx)
+                        break  # break attempt loop, rotate keys
+
+                    # Transient error: backoff with jitter and retry same key.
+                    backoff = min(2 ** attempt + random.uniform(0, 1), 30.0)
+                    if retry_after and retry_after <= _QUOTA_THRESHOLD_SECONDS:
+                        backoff = retry_after
+                    logger.warning(
+                        "fixer.attempt_failed",
+                        finding_id=finding_id,
+                        model=model,
+                        key=key_id,
+                        attempt=attempt,
+                        of=MAX_ATTEMPTS_PER_KEY,
+                        backoff_seconds=backoff if attempt < MAX_ATTEMPTS_PER_KEY else None,
+                        error=str(e)[:200],
+                    )
+                    if attempt < MAX_ATTEMPTS_PER_KEY:
+                        await asyncio.sleep(backoff)
+
+            # All attempts on this key failed (transient) OR key marked
+            # exhausted (quota) — either way, rotate.
+            current = rotator.rotate()
+
+        logger.warning(
+            "fixer.all_keys_exhausted",
+            finding_id=finding_id,
+            model=model,
+            total_keys=rotator.total,
+        )
+
+    raise last_err if last_err is not None else RuntimeError(
+        "fixer: all keys/models exhausted with no recorded error"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Node
+# ---------------------------------------------------------------------------
 
 async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
     gl: Config = config["configurable"]["gl_config"]
     logger = get_agent_logger(state.run_dir, "fixer")
 
-    if not gl.google_api_key:
+    keys = list(gl.google_api_keys or ([] if not gl.google_api_key else [gl.google_api_key]))
+    if not keys:
         logger.error("fixer.no_api_key")
         return {
             "status": "failed",
-            "error": "GOOGLE_API_KEY is not set; Fixer cannot run.",
+            "error": (
+                "No Gemini API keys configured. Set GOOGLE_API_KEY (and "
+                "optionally GOOGLE_API_KEY_2, _3, … or GOOGLE_API_KEYS=a,b,c)."
+            ),
         }
 
     source = state.source_file.read_text(encoding="utf-8", errors="replace")
@@ -289,14 +505,25 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
         "fixer.start",
         iteration=state.loop_count,
         enriched=len(state.enriched_findings),
-        model=gl.fixer_model,
+        primary_model=gl.fixer_model,
+        fallback_model=gl.fixer_fallback_model,
+        keys_available=len(keys),
     )
 
-    # Lazy SDK init: on retry iterations where every prior patch held, we must
-    # not touch genai at all. Tests assert this by monkeypatching genai.Client
-    # to raise.
-    client: genai.Client | None = None
-    gen_config: types.GenerateContentConfig | None = None
+    gen_config = types.GenerateContentConfig(
+        system_instruction=FIXER_SYSTEM,
+        temperature=0.2,
+    )
+    rotator = KeyRotator(keys=keys)
+
+    # Aggregate usage across all findings for the run summary.
+    run_usage = {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "calls": 0,
+        "by_model": {},  # model_name → {prompt, completion, total, calls}
+    }
 
     for ef in state.enriched_findings:
         f = ef.finding
@@ -311,31 +538,40 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
         prompt = _build_prompt(ef, source, prior, prior_verif)
         logger.info("fixer.prompting", finding_id=f.id, iteration=state.loop_count)
 
-        if client is None:
-            client = _make_client(gl.google_api_key)
-            gen_config = types.GenerateContentConfig(
-                system_instruction=FIXER_SYSTEM,
-                temperature=0.2,
-            )
-
         try:
-            data = await _generate_with_retry(
-                client=client,
-                model=gl.fixer_model,
+            data, usage = await _generate_with_rotation(
+                rotator=rotator,
+                primary_model=gl.fixer_model,
+                fallback_model=gl.fixer_fallback_model,
                 prompt=prompt,
                 gen_config=gen_config,
                 timeout=gl.gemini_timeout_seconds,
                 logger=logger,
                 finding_id=f.id,
             )
-        except Exception as e:  # noqa: BLE001 — surface skips, don't fail the whole run.
+        except Exception as e:  # noqa: BLE001
             logger.error(
                 "fixer.gave_up",
                 finding_id=f.id,
-                error=str(e),
-                attempts=MAX_ATTEMPTS,
+                error=str(e)[:300],
+                keys_remaining=rotator.remaining,
             )
             continue
+
+        # Accumulate usage
+        run_usage["calls"] += 1
+        run_usage["prompt_tokens"] += usage.get("prompt_tokens", 0)
+        run_usage["completion_tokens"] += usage.get("completion_tokens", 0)
+        run_usage["total_tokens"] += usage.get("total_tokens", 0)
+        model_used = usage.get("model", gl.fixer_model)
+        bucket = run_usage["by_model"].setdefault(
+            model_used,
+            {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0},
+        )
+        bucket["calls"] += 1
+        bucket["prompt_tokens"] += usage.get("prompt_tokens", 0)
+        bucket["completion_tokens"] += usage.get("completion_tokens", 0)
+        bucket["total_tokens"] += usage.get("total_tokens", 0)
 
         patched_code = data.get("patched_code") or ""
         reasoning = data.get("reasoning_chain") or []
@@ -351,7 +587,7 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
             diff=_unified_diff(source, patched_code, f.file_path),
             reasoning_chain=[str(s) for s in reasoning],
             iteration=state.loop_count,
-            model=gl.fixer_model,
+            model=model_used,
         )
         new_patches = [
             p
@@ -363,7 +599,26 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
             "fixer.patch_ready",
             finding_id=f.id,
             iteration=state.loop_count,
+            model=model_used,
             steps=len(patch.reasoning_chain),
+            tokens=usage.get("total_tokens", 0),
         )
+
+    logger.info(
+        "fixer.done",
+        patches=len(new_patches),
+        total_tokens=run_usage["total_tokens"],
+        calls=run_usage["calls"],
+        keys_exhausted=rotator.total - rotator.remaining,
+    )
+
+    # Persist usage so the report node can include it in run_summary.json.
+    # We attach it to the patch list via a side-channel file the report node
+    # reads — no PipelineState schema change required.
+    try:
+        usage_path = state.run_dir / "fixer_usage.json"
+        usage_path.write_text(json.dumps(run_usage, indent=2), encoding="utf-8")
+    except OSError:
+        pass
 
     return {"patches": new_patches, "status": "verifying"}

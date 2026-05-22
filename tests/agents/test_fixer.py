@@ -6,7 +6,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from guardianloop.agents.fixer import (
+    KeyRotator,
     _build_prompt,
+    _classify_error,
     _extract_json,
     _unified_diff,
     fixer_node,
@@ -182,7 +184,7 @@ async def test_fixer_skips_held_findings_on_retry(monkeypatch, tmp_path, runnabl
 
 @pytest.mark.asyncio
 async def test_fixer_fails_without_api_key(tmp_path):
-    cfg = Config(google_api_key=None)
+    cfg = Config(google_api_key=None, google_api_keys=[])
     source = tmp_path / "t.py"
     source.write_text("x=1\n")
     run_dir = tmp_path / "run"
@@ -191,3 +193,136 @@ async def test_fixer_fails_without_api_key(tmp_path):
     update = await fixer_node(state, {"configurable": {"gl_config": cfg}})
     assert update["status"] == "failed"
     assert "GOOGLE_API_KEY" in (update["error"] or "")
+
+
+# ---------------- KeyRotator unit tests ----------------
+
+def test_key_rotator_current_returns_first_available():
+    r = KeyRotator(keys=["a", "b", "c"])
+    idx, key = r.current()
+    assert idx == 0
+    assert key == "a"
+
+
+def test_key_rotator_rotate_advances():
+    r = KeyRotator(keys=["a", "b", "c"])
+    assert r.current() == (0, "a")
+    assert r.rotate() == (1, "b")
+    assert r.rotate() == (2, "c")
+
+
+def test_key_rotator_skips_exhausted():
+    r = KeyRotator(keys=["a", "b", "c"])
+    r.mark_exhausted(0)
+    idx, key = r.current()
+    assert idx == 1
+    assert key == "b"
+
+
+def test_key_rotator_all_exhausted_returns_none():
+    r = KeyRotator(keys=["a", "b"])
+    r.mark_exhausted(0)
+    r.mark_exhausted(1)
+    assert r.current() is None
+    assert r.rotate() is None
+
+
+def test_key_rotator_empty():
+    r = KeyRotator(keys=[])
+    assert r.current() is None
+    assert r.total == 0
+    assert r.remaining == 0
+
+
+# ---------------- error classification ----------------
+
+def test_classify_error_detects_daily_quota():
+    err = Exception("429 RESOURCE_EXHAUSTED: You exceeded your daily quota.")
+    is_quota, _ = _classify_error(err)
+    assert is_quota is True
+
+
+def test_classify_error_detects_long_retry_as_quota():
+    err = Exception("429 too many requests, retry_in 86400s")
+    is_quota, retry = _classify_error(err)
+    assert is_quota is True
+    assert retry == 86400.0
+
+
+def test_classify_error_short_retry_is_transient():
+    err = Exception("429 burst limit, retry after 3s")
+    is_quota, retry = _classify_error(err)
+    assert is_quota is False
+    assert retry == 3.0
+
+
+def test_classify_error_non_429_is_transient():
+    err = Exception("500 internal server error")
+    is_quota, _ = _classify_error(err)
+    assert is_quota is False
+
+
+# ---------------- multi-key end-to-end ----------------
+
+@pytest.mark.asyncio
+async def test_fixer_rotates_keys_on_quota_exhaustion(
+    monkeypatch, tmp_path, runnable_config
+):
+    """First key returns 429 quota → rotator skips to second key → success."""
+    source = tmp_path / "target.py"
+    source.write_text("x=1\n")
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+
+    f = Finding(
+        id="fid1",
+        tool="bandit",
+        rule_id="B608",
+        cwe_id="CWE-89",
+        message="sqli",
+        severity="HIGH",
+        file_path=str(source),
+        line_start=1,
+        line_end=1,
+        language="python",
+    )
+    ef = EnrichedFinding(finding=f, enrichment_source="none")
+
+    # Override the config: 2 keys instead of 1
+    cfg = runnable_config["configurable"]["gl_config"]
+    object.__setattr__(cfg, "google_api_keys", ["key-dead", "key-live"])
+    object.__setattr__(cfg, "google_api_key", "key-dead")
+
+    calls: list[str] = []
+
+    def _client_factory(api_key=None, **_):
+        calls.append(api_key)
+        client = MagicMock()
+        if api_key == "key-dead":
+            client.aio.models.generate_content = AsyncMock(
+                side_effect=Exception(
+                    "429 RESOURCE_EXHAUSTED: daily quota exceeded for this project"
+                )
+            )
+        else:
+            fake = MagicMock()
+            fake.text = json.dumps(
+                {
+                    "reasoning_chain": ["a", "b", "c", "d", "e"],
+                    "patched_code": "x=2\n",
+                }
+            )
+            client.aio.models.generate_content = AsyncMock(return_value=fake)
+        return client
+
+    monkeypatch.setattr("google.genai.Client", _client_factory)
+
+    state = PipelineState(source_file=source, run_dir=run_dir, enriched_findings=[ef])
+    update = await fixer_node(state, runnable_config)
+
+    assert update["status"] == "verifying"
+    assert len(update["patches"]) == 1
+    assert update["patches"][0].patched_code == "x=2\n"
+    # First key tried then rotated away to second key
+    assert "key-dead" in calls
+    assert "key-live" in calls
