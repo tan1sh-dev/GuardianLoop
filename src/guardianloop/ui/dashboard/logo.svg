@@ -1,0 +1,106 @@
+<svg width="100%" viewBox="0 0 690 490" role="img" xmlns="http://www.w3.org/2000/svg" style="">
+<title style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">GuardianLoop Logo</title>
+<desc style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">A premium cybersecurity logo for GuardianLoop featuring an infinite loop interlocked with a shield, glowing neon purple on a deep dark background.</desc>
+<defs>
+  <radialGradient id="bg-glow" cx="50%" cy="50%" r="55%">
+    <stop offset="0%" stop-color="#1a0d2e" stop-opacity="1"/>
+    <stop offset="100%" stop-color="#05030f" stop-opacity="1"/>
+  </radialGradient>
+  <radialGradient id="core-glow" cx="50%" cy="48%" r="38%">
+    <stop offset="0%" stop-color="#c084fc" stop-opacity="0.18"/>
+    <stop offset="60%" stop-color="#7c3aed" stop-opacity="0.06"/>
+    <stop offset="100%" stop-color="#c084fc" stop-opacity="0"/>
+  </radialGradient>
+  <filter id="bloom" x="-40%" y="-40%" width="180%" height="180%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="4.5" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="soft-bloom" x="-60%" y="-60%" width="220%" height="220%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="9" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="text-glow" x="-20%" y="-80%" width="140%" height="260%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <linearGradient id="loop-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#e879f9"/>
+    <stop offset="40%" stop-color="#c084fc"/>
+    <stop offset="100%" stop-color="#818cf8"/>
+  </linearGradient>
+  <linearGradient id="shield-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#c084fc" stop-opacity="0.22"/>
+    <stop offset="100%" stop-color="#7c3aed" stop-opacity="0.08"/>
+  </linearGradient>
+  <linearGradient id="accent-line" x1="0%" y1="0%" x2="100%" y2="0%">
+    <stop offset="0%" stop-color="#c084fc" stop-opacity="0"/>
+    <stop offset="50%" stop-color="#c084fc" stop-opacity="0.6"/>
+    <stop offset="100%" stop-color="#c084fc" stop-opacity="0"/>
+  </linearGradient>
+<mask id="imagine-text-gaps-aqo0jd" maskUnits="userSpaceOnUse"><rect x="0" y="0" width="690" height="490" fill="white"/><rect x="177.5749969482422" y="328" width="324.8500061035156" height="42.400001525878906" fill="black" rx="2"/><rect x="180.18125915527344" y="378" width="318.8374938964844" height="15.199999809265137" fill="black" rx="2"/><rect x="226.7375030517578" y="398" width="226.52500915527344" height="15.199999809265137" fill="black" rx="2"/></mask></defs>
+
+<!-- Background -->
+<rect width="680" height="480" fill="url(#bg-glow)" style="stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+<!-- Subtle grid lines -->
+<g opacity="0.06" stroke="#c084fc" stroke-width="0.5" style="fill:rgb(0, 0, 0);stroke:rgb(192, 132, 252);color:rgb(255, 255, 255);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.06;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
+  <line x1="0" y1="120" x2="680" y2="120" style="fill:rgb(0, 0, 0);stroke:rgb(192, 132, 252);color:rgb(255, 255, 255);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <line x1="0" y1="240" x2="680" y2="240" style="fill:rgb(0, 0, 0);stroke:rgb(192, 132, 252);color:rgb(255, 255, 255);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <line x1="0" y1="360" x2="680" y2="360" mask="url(#imagine-text-gaps-aqo0jd)" style="fill:rgb(0, 0, 0);stroke:rgb(192, 132, 252);color:rgb(255, 255, 255);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <line x1="170" y1="0" x2="170" y2="480" style="fill:rgb(0, 0, 0);stroke:rgb(192, 132, 252);color:rgb(255, 255, 255);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <line x1="340" y1="0" x2="340" y2="480" mask="url(#imagine-text-gaps-aqo0jd)" style="fill:rgb(0, 0, 0);stroke:rgb(192, 132, 252);color:rgb(255, 255, 255);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <line x1="510" y1="0" x2="510" y2="480" style="fill:rgb(0, 0, 0);stroke:rgb(192, 132, 252);color:rgb(255, 255, 255);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+</g>
+<!-- Ambient core glow -->
+<rect width="680" height="480" fill="url(#core-glow)" style="stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+<!-- === SHIELD === -->
+<g filter="url(#soft-bloom)" opacity="0.55" style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.55;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
+  <path d="M340 145 L412 170 L412 240 Q412 288 340 316 Q268 288 268 240 L268 170 Z" fill="none" stroke="#c084fc" stroke-width="2.5" style="fill:none;stroke:rgb(192, 132, 252);color:rgb(255, 255, 255);stroke-width:2.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+</g>
+<path d="M340 148 L408 172 L408 238 Q408 282 340 308 Q272 282 272 238 L272 172 Z" fill="url(#shield-grad)" style="stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+<g filter="url(#bloom)" style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
+  <path d="M340 148 L408 172 L408 238 Q408 282 340 308 Q272 282 272 238 L272 172 Z" fill="none" stroke="url(#loop-grad)" stroke-width="2" stroke-linejoin="round" style="fill:none;color:rgb(255, 255, 255);stroke-width:2px;stroke-linecap:butt;stroke-linejoin:round;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+</g>
+<line x1="290" y1="200" x2="390" y2="200" stroke="#c084fc" stroke-width="0.8" opacity="0.35" style="fill:rgb(0, 0, 0);stroke:rgb(192, 132, 252);color:rgb(255, 255, 255);stroke-width:0.8px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.35;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+<!-- === INFINITY LOOP === -->
+<g filter="url(#soft-bloom)" opacity="0.45" style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.45;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
+  <path d="M340 228 C 320 200, 278 190, 268 228 C 258 266, 300 282, 340 228Z" fill="none" stroke="#c084fc" stroke-width="4" style="fill:none;stroke:rgb(192, 132, 252);color:rgb(255, 255, 255);stroke-width:4px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <path d="M340 228 C 360 200, 402 190, 412 228 C 422 266, 380 282, 340 228Z" fill="none" stroke="#818cf8" stroke-width="4" style="fill:none;stroke:rgb(129, 140, 248);color:rgb(255, 255, 255);stroke-width:4px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+</g>
+<g filter="url(#bloom)" style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
+  <path d="M340 228 C 320 200, 278 190, 268 228 C 258 266, 300 282, 340 228Z" fill="none" stroke="url(#loop-grad)" stroke-width="3" stroke-linecap="round" style="fill:none;color:rgb(255, 255, 255);stroke-width:3px;stroke-linecap:round;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <path d="M340 228 C 360 200, 402 190, 412 228 C 422 266, 380 282, 340 228Z" fill="none" stroke="url(#loop-grad)" stroke-width="3" stroke-linecap="round" style="fill:none;color:rgb(255, 255, 255);stroke-width:3px;stroke-linecap:round;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+</g>
+<g filter="url(#bloom)" style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
+  <circle cx="333" cy="228" r="3.5" fill="#e879f9" opacity="0.9" style="fill:rgb(232, 121, 249);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.9;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <circle cx="347" cy="228" r="3.5" fill="#818cf8" opacity="0.9" style="fill:rgb(129, 140, 248);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.9;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+</g>
+<g filter="url(#bloom)" style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
+  <circle cx="268" cy="228" r="3" fill="#22d3ee" opacity="0.8" style="fill:rgb(34, 211, 238);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.8;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <circle cx="412" cy="228" r="3" fill="#22d3ee" opacity="0.8" style="fill:rgb(34, 211, 238);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.8;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <circle cx="340" cy="148" r="2.5" fill="#c084fc" opacity="0.9" style="fill:rgb(192, 132, 252);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.9;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+</g>
+
+<!-- === CORNER BRACKETS === -->
+<g stroke="#c084fc" stroke-width="1" opacity="0.3" fill="none" style="fill:none;stroke:rgb(192, 132, 252);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.3;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
+  <path d="M200 100 L220 100 L220 116" style="fill:none;stroke:rgb(192, 132, 252);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <path d="M480 100 L460 100 L460 116" style="fill:none;stroke:rgb(192, 132, 252);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <path d="M200 380 L220 380 L220 364" mask="url(#imagine-text-gaps-aqo0jd)" style="fill:none;stroke:rgb(192, 132, 252);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <path d="M480 380 L460 380 L460 364" mask="url(#imagine-text-gaps-aqo0jd)" style="fill:none;stroke:rgb(192, 132, 252);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+</g>
+<line x1="170" y1="228" x2="268" y2="228" stroke="url(#accent-line)" stroke-width="0.8" opacity="0.6" style="fill:rgb(0, 0, 0);color:rgb(255, 255, 255);stroke-width:0.8px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.6;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+<line x1="412" y1="228" x2="510" y2="228" stroke="url(#accent-line)" stroke-width="0.8" opacity="0.6" style="fill:rgb(0, 0, 0);color:rgb(255, 255, 255);stroke-width:0.8px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.6;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+<!-- === WORDMARK === -->
+<g filter="url(#text-glow)" style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">
+  <text x="340" y="358" text-anchor="middle" font-family="'Courier New', 'Lucida Console', monospace" font-size="34" font-weight="700" letter-spacing="6" fill="#c084fc" style="fill:rgb(192, 132, 252);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Courier New&quot;, &quot;Lucida Console&quot;, monospace;font-size:34px;font-weight:700;text-anchor:middle;dominant-baseline:auto">GUARDIANLOOP</text>
+</g>
+<line x1="218" y1="368" x2="462" y2="368" stroke="url(#accent-line)" stroke-width="0.7" opacity="0.5" mask="url(#imagine-text-gaps-aqo0jd)" style="fill:rgb(0, 0, 0);color:rgb(255, 255, 255);stroke-width:0.7px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.5;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+<!-- === TAGLINE: two lines === -->
+<text x="340" y="388" text-anchor="middle" font-family="'Courier New', 'Lucida Console', monospace" font-size="10" font-weight="400" letter-spacing="4" fill="#818cf8" opacity="0.55" style="fill:rgb(129, 140, 248);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.55;font-family:&quot;Courier New&quot;, &quot;Lucida Console&quot;, monospace;font-size:10px;font-weight:400;text-anchor:middle;dominant-baseline:auto">AUTONOMOUS AI SECURITY PIPELINE</text>
+
+<text x="340" y="408" text-anchor="middle" font-family="'Courier New', 'Lucida Console', monospace" font-size="10" font-weight="400" letter-spacing="3.5" fill="#c084fc" opacity="0.65" style="fill:rgb(192, 132, 252);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.65;font-family:&quot;Courier New&quot;, &quot;Lucida Console&quot;, monospace;font-size:10px;font-weight:400;text-anchor:middle;dominant-baseline:auto">DETECT · PATCH · VERIFY</text>
+
+</svg>

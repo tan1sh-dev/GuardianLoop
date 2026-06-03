@@ -1,0 +1,15 @@
+rules:
+  - id: python-cwe78-command-injection
+    languages: [python]
+    severity: ERROR
+    message: >
+      Command injection detected. Avoid passing unsanitized input to `os.system`
+      or `subprocess` functions (CWE-78).
+    metadata:
+      cwe: CWE-78
+    patterns:
+      - pattern-either:
+          - pattern: os.system(...)
+          - pattern: os.popen(...)
+      - pattern-not: os.system("...")
+      - pattern-not: os.popen("...")

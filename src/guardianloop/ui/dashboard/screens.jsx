@@ -1,6 +1,67 @@
 // Overview, Findings, Scan Detail, New Scan, Settings
 const { useState: uS1, useEffect: uE1, useRef: uRef1 } = React;
 
+// ---------- Patch Viewer w/ Diff Toggle ----------
+const PatchViewer = ({ patch, language }) => {
+  const [showFull, setShowFull] = React.useState(false);
+
+  return (
+    <div>
+      <div style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 6,
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 6,
+      }}>
+        <div style={{ flex: "1 1 auto", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "var(--fontMono)", fontSize: 10, color: "var(--ok)", textTransform: "uppercase", letterSpacing: 1 }}>
+          patched · {patch.model} · iteration {patch.iteration + 1}
+        </div>
+        <div style={{ display: "flex", gap: 4, background: "var(--panelAlt)", padding: 2, borderRadius: 5, border: "1px solid var(--border)" }}>
+          <button
+            onClick={() => setShowFull(false)}
+            style={{
+              background: !showFull ? "var(--borderStrong)" : "transparent",
+              color: !showFull ? "var(--text)" : "var(--textMute)",
+              border: "none",
+              borderRadius: 3,
+              fontSize: 10.5,
+              padding: "2px 8px",
+              fontFamily: "var(--fontMono)",
+              cursor: "pointer",
+              transition: "all 120ms",
+            }}
+          >
+            diff
+          </button>
+          <button
+            onClick={() => setShowFull(true)}
+            style={{
+              background: showFull ? "var(--borderStrong)" : "transparent",
+              color: showFull ? "var(--text)" : "var(--textMute)",
+              border: "none",
+              borderRadius: 3,
+              fontSize: 10.5,
+              padding: "2px 8px",
+              fontFamily: "var(--fontMono)",
+              cursor: "pointer",
+              transition: "all 120ms",
+            }}
+          >
+            code at this step
+          </button>
+        </div>
+      </div>
+      {showFull ? (
+        <CodeBlock code={patch.patched_code || ""} lang={language} highlightLines={[]} />
+      ) : (
+        <CodeBlock code={patch.diff || ""} lang="diff" showDiff={true} highlightLines={[]} />
+      )}
+    </div>
+  );
+};
+
 // ========== OVERVIEW ==========
 const OverviewScreen = ({ onNav }) => {
   const [runs, setRuns]       = uS1([]);
@@ -23,7 +84,7 @@ const OverviewScreen = ({ onNav }) => {
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div>
         <div style={{ fontFamily: "var(--fontMono)", fontSize: 11, color: "var(--textMute)", letterSpacing: 1.4, textTransform: "uppercase" }}>
-          Mission control
+          Security Console
         </div>
         <h1 style={{ fontFamily: "var(--fontDisplay)", fontSize: 36, fontWeight: 600, margin: "8px 0 6px", letterSpacing: -0.6 }}>
           {loading
@@ -469,21 +530,18 @@ const ScanDetailScreen = ({ run, onNav }) => {
 
             {/* ── vulnerable snippet + patch diff ── */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <div style={{ fontFamily: "var(--fontMono)", fontSize: 10, color: "var(--textMute)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
                   vulnerable · line {f.line_start}
                 </div>
                 <CodeBlock code={f.snippet || (cweInfo && cweInfo.vulnCode) || ""} lang={f.language || "python"} highlightLines={[]} />
               </div>
               {patch ? (
-                <div>
-                  <div style={{ fontFamily: "var(--fontMono)", fontSize: 10, color: "var(--ok)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
-                    patched · {patch.model} · iteration {patch.iteration + 1}
-                  </div>
-                  <CodeBlock code={patch.diff || ""} lang="diff" highlightLines={[]} />
+                <div style={{ minWidth: 0 }}>
+                  <PatchViewer patch={patch} language={f.language || "python"} />
                 </div>
               ) : (
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <div style={{ fontFamily: "var(--fontMono)", fontSize: 10, color: "var(--textMute)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
                     patch
                   </div>
@@ -528,6 +586,16 @@ const ScanDetailScreen = ({ run, onNav }) => {
           <div style={{ padding: 24, textAlign: "center", color: "var(--textMute)", fontFamily: "var(--fontMono)", fontSize: 12 }}>
             no findings for this run
           </div>
+        </Panel>
+      )}
+
+      {/* ── Final Patched Code ── */}
+      {patches.length > 0 && (
+        <Panel title="final patched code (all fixes combined)">
+          <div style={{ paddingBottom: 8, color: "var(--textDim)", fontSize: 13 }}>
+            The fixer chains patches sequentially. This is the final source code with all fixes applied.
+          </div>
+          <CodeBlock code={patches[patches.length - 1].patched_code || ""} lang={language} />
         </Panel>
       )}
 
@@ -769,7 +837,7 @@ const AgentsScreen = () => {
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div>
         <h1 style={{ fontFamily: "var(--fontDisplay)", fontSize: 32, fontWeight: 600, margin: "0 0 4px" }}>Agents</h1>
-        <div style={{ color: "var(--textDim)" }}>Five LangGraph nodes, one shared Pydantic state. All idle, all green.</div>
+        <div style={{ color: "var(--textDim)" }}>Five pipeline nodes, one shared Pydantic state. All idle, all green.</div>
       </div>
 
       {AGENTS.map(a => {
@@ -814,13 +882,71 @@ const Stat2 = ({ label, value }) => (
 // ========== SETTINGS ==========
 const SettingsScreen = () => {
   const [config, setConfig] = uS1({
-    fixer_model: "gemini-2.5-pro",
-    classifier_model: "gemini-2.5-flash",
+    fixer_model: "",
+    classifier_model: "",
     max_loop_iterations: 3,
     sandbox_timeout_seconds: 30,
-    nvd_api_key: "••••••••••••••3a7f",
-    google_api_key: "••••••••••••••e92c",
+    nvd_api_key: "",
+    google_api_key: "",
+    google_api_key_2: "",
+    google_api_key_3: "",
   });
+  const [loading, setLoading] = uS1(true);
+  const [saving, setSaving] = uS1(false);
+  const [error, setError] = uS1(null);
+  const [success, setSuccess] = uS1(false);
+
+  const fetchConfig = () => {
+    setLoading(true);
+    fetch("/api/config")
+      .then(r => {
+        if (!r.ok) throw new Error("Failed to load configuration");
+        return r.json();
+      })
+      .then(data => {
+        setConfig(data);
+        setError(null);
+      })
+      .catch(err => setError(err.message))
+      .finally(() => setLoading(false));
+  };
+
+  uE1(() => {
+    fetchConfig();
+  }, []);
+
+  const handleSave = () => {
+    setSaving(true);
+    setSuccess(false);
+    setError(null);
+    fetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config)
+    })
+      .then(r => {
+        if (!r.ok) throw new Error("Failed to save configuration");
+        return r.json();
+      })
+      .then(() => {
+        setSuccess(true);
+        // Refetch to get updated masked keys
+        fetchConfig();
+      })
+      .catch(err => setError(err.message))
+      .finally(() => setSaving(false));
+  };
+
+  const handleDiscard = () => {
+    setSuccess(false);
+    setError(null);
+    fetchConfig();
+  };
+
+  if (loading) {
+    return <div style={{ color: "var(--textDim)", padding: 32 }}>Loading settings...</div>;
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 920 }}>
       <div>
@@ -828,10 +954,22 @@ const SettingsScreen = () => {
         <div style={{ color: "var(--textDim)" }}>Mirrors <span style={{ fontFamily: "var(--fontMono)", color: "var(--accent)" }}>config.yaml</span> + <span style={{ fontFamily: "var(--fontMono)", color: "var(--accent)" }}>.env</span>. Changes regenerate the files on save.</div>
       </div>
 
+      {error && (
+        <div style={{ color: "#ef4444", background: "rgba(239, 68, 68, 0.1)", padding: 12, borderRadius: 4, fontSize: 13, border: "1px solid rgba(239, 68, 68, 0.2)" }}>
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div style={{ color: "#10b981", background: "rgba(16, 185, 129, 0.1)", padding: 12, borderRadius: 4, fontSize: 13, border: "1px solid rgba(16, 185, 129, 0.2)" }}>
+          Settings saved successfully!
+        </div>
+      )}
+
       <Panel title="models">
         <SettingRow label="fixer_model" desc="Chain-of-thought patch generation. Gemini 2.5 Pro recommended.">
           <Select value={config.fixer_model} onChange={v => setConfig({ ...config, fixer_model: v })}
-            options={["gemini-2.5-pro", "gemini-2.5-flash", "claude-sonnet-4.5", "gpt-5"]} />
+            options={["gemini-2.5-pro", "gemini-2.5-flash"]} />
         </SettingRow>
         <SettingRow label="classifier_model" desc="NVD-augmented severity scoring. Flash is fine.">
           <Select value={config.classifier_model} onChange={v => setConfig({ ...config, classifier_model: v })}
@@ -862,13 +1000,25 @@ const SettingsScreen = () => {
       </Panel>
 
       <Panel title="secrets · .env">
-        <SettingRow label="GOOGLE_API_KEY" desc="Used by Fixer + Classifier."><MaskedInput value={config.google_api_key} /></SettingRow>
-        <SettingRow label="NVD_API_KEY" desc="Raises rate limit 5 → 50 / 30s."><MaskedInput value={config.nvd_api_key} /></SettingRow>
+        <SettingRow label="GOOGLE_API_KEY" desc="Primary key used by Fixer + Classifier.">
+          <MaskedInput value={config.google_api_key} onChange={v => setConfig({ ...config, google_api_key: v })} />
+        </SettingRow>
+        <SettingRow label="GOOGLE_API_KEY_2" desc="Rotation key 2 (optional fallback).">
+          <MaskedInput value={config.google_api_key_2} onChange={v => setConfig({ ...config, google_api_key_2: v })} />
+        </SettingRow>
+        <SettingRow label="GOOGLE_API_KEY_3" desc="Rotation key 3 (optional fallback).">
+          <MaskedInput value={config.google_api_key_3} onChange={v => setConfig({ ...config, google_api_key_3: v })} />
+        </SettingRow>
+        <SettingRow label="NVD_API_KEY" desc="Raises rate limit 5 → 50 / 30s.">
+          <MaskedInput value={config.nvd_api_key} onChange={v => setConfig({ ...config, nvd_api_key: v })} />
+        </SettingRow>
       </Panel>
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-        <Btn ghost>Discard</Btn>
-        <Btn primary icon="check">Save changes</Btn>
+        <Btn ghost onClick={handleDiscard} disabled={saving}>Discard</Btn>
+        <Btn primary icon="check" onClick={handleSave} disabled={saving}>
+          {saving ? "Saving..." : "Save changes"}
+        </Btn>
       </div>
     </div>
   );
@@ -901,11 +1051,24 @@ const Numeric = ({ value, onChange, min, max }) => (
   }} />
 );
 
-const MaskedInput = ({ value }) => (
-  <input value={value} readOnly style={{
-    padding: "7px 10px", background: "var(--panelAlt)", border: "1px solid var(--border)",
-    color: "var(--textDim)", fontFamily: "var(--fontMono)", fontSize: 12, borderRadius: 4, width: 240,
-  }} />
-);
+const MaskedInput = ({ value, onChange }) => {
+  const handleFocus = () => {
+    if (value && value.includes("•")) {
+      onChange("");
+    }
+  };
+  return (
+    <input 
+      value={value} 
+      onFocus={handleFocus}
+      onChange={e => onChange(e.target.value)} 
+      placeholder={value && value.includes("•") ? "••••••••••••" : "Enter new API key"}
+      style={{
+        padding: "7px 10px", background: "var(--panelAlt)", border: "1px solid var(--border)",
+        color: "var(--text)", fontFamily: "var(--fontMono)", fontSize: 12, borderRadius: 4, width: 240,
+      }} 
+    />
+  );
+};
 
 Object.assign(window, { OverviewScreen, FindingsScreen, ScanDetailScreen, NewScanScreen, AgentsScreen, SettingsScreen });

@@ -62,6 +62,18 @@ def get_agent_logger(run_dir: Path, agent_name: str) -> structlog.BoundLogger:
     stdlib_logger.setLevel(logging.INFO)
 
     log_path = run_dir / f"{agent_name}.log"
+    # Remove any existing FileHandlers to prevent crosstalk between different scan runs
+    handlers_to_remove = [
+        h for h in stdlib_logger.handlers
+        if isinstance(h, logging.FileHandler) and getattr(h, "baseFilename", None) != str(log_path)
+    ]
+    for h in handlers_to_remove:
+        stdlib_logger.removeHandler(h)
+        try:
+            h.close()
+        except Exception:
+            pass
+
     already_attached = any(
         getattr(h, "baseFilename", None) == str(log_path) for h in stdlib_logger.handlers
     )

@@ -50,7 +50,10 @@ MAX_ATTEMPTS_PER_KEY = 2
 FIXER_SYSTEM = (
     "You are GuardianLoop's Fixer agent. Given a vulnerable source file and a "
     "vulnerability finding, produce a minimally-invasive patch that eliminates "
-    "the vulnerability while preserving intended behavior. Think step by step."
+    "the vulnerability while preserving intended behavior. Think step by step.\n"
+    "CRITICAL GUIDELINE: When fixing path traversal (CWE-22), prefer validating paths "
+    "using os.path.abspath and os.path.commonpath rather than stripping slashes with "
+    "werkzeug.utils.secure_filename, as the latter breaks legitimate subdirectory access."
 )
 
 _INSTRUCTIONS = """
@@ -390,11 +393,24 @@ async def _generate_with_rotation(
     """
     last_err: Exception | None = None
 
-    for stage, model in enumerate([primary_model, fallback_model]):
+    models_to_try = [(0, primary_model)]
+    if fallback_model and fallback_model != primary_model:
+        models_to_try.append((1, fallback_model))
+
+    for stage, model in models_to_try:
         # Reset rotator state for the second stage so we re-try keys that were
         # marked exhausted on Pro — they may still have flash budget.
         if stage == 1:
             rotator = KeyRotator(keys=list(rotator.keys))
+
+        current = rotator.current()
+        if current is None:
+            if stage == 0:
+                continue
+            else:
+                break
+
+        if stage == 1:
             logger.warning(
                 "fixer.model_downgrade",
                 finding_id=finding_id,
@@ -402,9 +418,14 @@ async def _generate_with_rotation(
                 to_model=fallback_model,
             )
 
-        current = rotator.current()
+        tried_indices: set[int] = set()
         while current is not None:
             idx, key = current
+            if idx in tried_indices:
+                # We have tried all available keys in this stage
+                break
+            tried_indices.add(idx)
+
             key_id = f"key#{idx + 1}/{rotator.total}"
 
             for attempt in range(1, MAX_ATTEMPTS_PER_KEY + 1):
@@ -464,12 +485,13 @@ async def _generate_with_rotation(
             # exhausted (quota) — either way, rotate.
             current = rotator.rotate()
 
-        logger.warning(
-            "fixer.all_keys_exhausted",
-            finding_id=finding_id,
-            model=model,
-            total_keys=rotator.total,
-        )
+        if stage == 0 and fallback_model != primary_model:
+            logger.warning(
+                "fixer.all_keys_exhausted",
+                finding_id=finding_id,
+                model=model,
+                total_keys=rotator.total,
+            )
 
     raise last_err if last_err is not None else RuntimeError(
         "fixer: all keys/models exhausted with no recorded error"
@@ -514,7 +536,8 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
         system_instruction=FIXER_SYSTEM,
         temperature=0.2,
     )
-    rotator = KeyRotator(keys=keys)
+    # NOTE: rotator is created per-finding inside the loop below,
+    # so each finding gets an independent shot at all API keys.
 
     # Aggregate usage across all findings for the run summary.
     run_usage = {
@@ -524,6 +547,11 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
         "calls": 0,
         "by_model": {},  # model_name → {prompt, completion, total, calls}
     }
+
+    # Chain patches: each finding's prompt receives the progressively-patched
+    # source so fixes accumulate instead of each patch independently fixing
+    # only one vulnerability against the original.
+    running_source = source
 
     for ef in state.enriched_findings:
         f = ef.finding
@@ -535,7 +563,8 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
         prior = last_patch.get(f.id)
         prior_verif = last_verif.get(f.id) if state.loop_count > 0 else None
 
-        prompt = _build_prompt(ef, source, prior, prior_verif)
+        prompt = _build_prompt(ef, running_source, prior, prior_verif)
+        rotator = KeyRotator(keys=keys)
         logger.info("fixer.prompting", finding_id=f.id, iteration=state.loop_count)
 
         try:
@@ -564,6 +593,8 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
         run_usage["completion_tokens"] += usage.get("completion_tokens", 0)
         run_usage["total_tokens"] += usage.get("total_tokens", 0)
         model_used = usage.get("model", gl.fixer_model)
+        
+        
         bucket = run_usage["by_model"].setdefault(
             model_used,
             {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "calls": 0},
@@ -581,10 +612,12 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
         if not isinstance(reasoning, list):
             reasoning = [str(reasoning)]
 
+        # Diff is computed against the running (already-patched) source so
+        # each finding's diff shows only the change it introduces.
         patch = Patch(
             finding_id=f.id,
             patched_code=patched_code,
-            diff=_unified_diff(source, patched_code, f.file_path),
+            diff=_unified_diff(running_source, patched_code, f.file_path),
             reasoning_chain=[str(s) for s in reasoning],
             iteration=state.loop_count,
             model=model_used,
@@ -595,6 +628,10 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
             if not (p.finding_id == f.id and p.iteration == state.loop_count)
         ]
         new_patches.append(patch)
+
+        # Update running source so the next finding's prompt includes this fix.
+        running_source = patched_code
+
         logger.info(
             "fixer.patch_ready",
             finding_id=f.id,
@@ -609,7 +646,6 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
         patches=len(new_patches),
         total_tokens=run_usage["total_tokens"],
         calls=run_usage["calls"],
-        keys_exhausted=rotator.total - rotator.remaining,
     )
 
     # Persist usage so the report node can include it in run_summary.json.

@@ -53,9 +53,9 @@ const THEMES = {
     text: "#e8ecff",
     textDim: "#8a92b8",
     textMute: "#525a82",
-    accent: "#c084fc",
-    accentDim: "#a855f7",
-    accent2: "#22d3ee",
+    accent: "#34d399",
+    accentDim: "#059669",
+    accent2: "#38bdf8",
     danger: "#fb7185",
     warn: "#fcd34d",
     ok: "#4ade80",
@@ -274,23 +274,29 @@ const CodeBlock = ({ code, lang = "python", highlightLines = [], showDiff = fals
   const lines = code.split("\n");
   return (
     <div style={{
-      fontFamily: "var(--fontMono)", fontSize: 12.5, lineHeight: 1.65,
-      background: "var(--panelAlt)", border: "1px solid var(--border)", borderRadius: 6,
+      fontFamily: "var(--fontMono)", fontSize: 13.5, lineHeight: 1.8,
+      background: "var(--panelAlt)", border: "1px solid var(--border)", borderRadius: 8,
       overflow: "hidden",
     }}>
       <div style={{
-        padding: "6px 12px", borderBottom: "1px solid var(--border)",
+        padding: "8px 14px", borderBottom: "1px solid var(--border)",
         display: "flex", justifyContent: "space-between",
-        fontSize: 10, color: "var(--textMute)", letterSpacing: 0.6, textTransform: "uppercase",
+        fontSize: 11, color: "var(--textMute)", letterSpacing: 0.6, textTransform: "uppercase",
       }}>
         <span>{lang}</span>
         <span>{lines.length} lines</span>
       </div>
-      <pre style={{ margin: 0, padding: "10px 0", overflowX: "auto" }}>
+      <pre style={{ margin: 0, padding: "12px 0", overflowX: "auto" }}>
         {lines.map((line, i) => {
+          const isDiffHeader = showDiff && (line.startsWith("---") || line.startsWith("+++") || line.startsWith("@@"));
+          if (isDiffHeader) return null;
+
           const isDiffMinus = showDiff && line.startsWith("-");
           const isDiffPlus  = showDiff && line.startsWith("+");
           const isHL = highlightLines.includes(i + 1);
+          
+          const displayLine = showDiff && line.length > 0 ? line.slice(1) : line;
+
           return (
             <div key={i} style={{
               display: "flex",
@@ -309,7 +315,7 @@ const CodeBlock = ({ code, lang = "python", highlightLines = [], showDiff = fals
               <span style={{
                 color: isDiffMinus ? "var(--danger)" : isDiffPlus ? "var(--ok)" : "var(--text)",
                 whiteSpace: "pre", paddingRight: 16,
-              }}>{line || " "}</span>
+              }}>{displayLine || " "}</span>
             </div>
           );
         })}
@@ -319,16 +325,16 @@ const CodeBlock = ({ code, lang = "python", highlightLines = [], showDiff = fals
 };
 
 // ---------- panel + section ----------
-const Panel = ({ title, action, children, style = {}, padding = 16 }) => (
-  <div style={{
-    background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 6,
+const Panel = ({ title, action, children, style = {}, padding = 20 }) => (
+  <div className="gl-panel" style={{
+    background: "var(--panel)", border: "1px solid var(--border)", borderRadius: 8,
     ...style,
   }}>
     {title && (
       <div style={{
-        padding: "10px 14px", borderBottom: "1px solid var(--border)",
+        padding: "12px 18px", borderBottom: "1px solid var(--border)",
         display: "flex", justifyContent: "space-between", alignItems: "center",
-        fontFamily: "var(--fontMono)", fontSize: 11, color: "var(--textDim)",
+        fontFamily: "var(--fontMono)", fontSize: 12, color: "var(--textDim)",
         letterSpacing: 0.8, textTransform: "uppercase",
       }}>
         <span>{title}</span>
@@ -340,10 +346,10 @@ const Panel = ({ title, action, children, style = {}, padding = 16 }) => (
 );
 
 const Btn = ({ children, primary, ghost, onClick, icon, disabled, style = {}, type = "button" }) => (
-  <button type={type} onClick={onClick} disabled={disabled} style={{
-    display: "inline-flex", alignItems: "center", gap: 6,
-    padding: "7px 12px", borderRadius: 5,
-    fontFamily: "var(--fontUI)", fontSize: 12.5, fontWeight: 500,
+  <button type={type} className="gl-btn" onClick={onClick} disabled={disabled} style={{
+    display: "inline-flex", alignItems: "center", gap: 8,
+    padding: "9px 16px", borderRadius: 6,
+    fontFamily: "var(--fontUI)", fontSize: 13.5, fontWeight: 500,
     border: ghost ? "1px solid transparent"
           : primary ? `1px solid var(--accent)` : "1px solid var(--border)",
     background: primary ? "var(--accent)"
@@ -354,7 +360,7 @@ const Btn = ({ children, primary, ghost, onClick, icon, disabled, style = {}, ty
     transition: "all 120ms",
     ...style,
   }}>
-    {icon && <Icon name={icon} size={13} />}
+    {icon && <Icon name={icon} size={15} />}
     {children}
   </button>
 );

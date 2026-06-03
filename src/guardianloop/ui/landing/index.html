@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GuardianLoop · Autonomous Security Pipeline</title>
+  <meta name="description" content="GuardianLoop is a four-agent autonomous security pipeline that finds, classifies, patches, and red-team verifies vulnerabilities in your code — fully automated." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Montserrat:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&display=swap" />
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #06070b;
+      --bg2:         #0c0e16;
+      --bg3:         #0f1220;
+      --panel:       #0c0e16;
+      --panel-hover: #0f1220;
+      --border:      #1a1f35;
+      --borderStrong:#2d3559;
+      --border-glow: rgba(52,211,153,0.35);
+      --text:        #e8ecff;
+      --text-dim:    #8a92b8;
+      --text-mute:   #525a82;
+      --accent:      #34d399;
+      --accentDim:   #059669;
+      --accent2:     #38bdf8;
+      --accent3:     #818cf8;
+      --danger:      #fb7185;
+      --warn:        #fcd34d;
+      --ok:          #4ade80;
+      --fontDisplay: "Playfair Display", serif;
+      --fontUI:      "Plus Jakarta Sans", "Inter", sans-serif;
+      --fontMono:    "JetBrains Mono", ui-monospace, monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--fontUI);
+      font-size: 15px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── GLOBAL NOISE + GRADIENT WASH ── */
+    body::before {
+      content: "";
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(circle at 20% 0%, color-mix(in oklab, var(--accent) 12%, transparent), transparent 50%),
+        radial-gradient(circle at 100% 100%, color-mix(in oklab, var(--accent2) 10%, transparent), transparent 55%);
+      animation: pulse-wash 15s infinite alternate ease-in-out;
+    }
+    @keyframes pulse-wash {
+      0% { opacity: 0.7; transform: scale(1); }
+      100% { opacity: 1.2; transform: scale(1.05); }
+    }
+
+    /* ── GRID LINES BACKDROP ── */
+    body::after {
+      content: '';
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 60px 60px;
+      mask-image: radial-gradient(ellipse 80% 80% at 50% 0%, black 30%, transparent 100%);
+    }
+
+    /* ── LAYOUT ── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 32px; position: relative; z-index: 1; }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px);
+      background: rgba(6,7,13,0.80);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      max-width: 1400px; margin: 0 auto; padding: 0 32px;
+      height: 80px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-logo {
+      display: flex; align-items: center;
+      font-family: 'Montserrat', sans-serif; font-weight: 600; font-size: 26px; color: var(--text);
+      text-decoration: none; letter-spacing: -0.2px;
+    }
+    .nav-links { display: flex; align-items: center; gap: 32px; }
+    .nav-link {
+      padding: 8px 16px; border-radius: 8px; font-size: 15px; font-weight: 500;
+      color: var(--text-dim); text-decoration: none;
+      transition: color 150ms, background 150ms;
+    }
+    .nav-link:hover { color: var(--text); background: var(--panel); }
+    .nav-cta {
+      padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      background: linear-gradient(135deg, var(--accent), var(--accentDim));
+      color: #fff; text-decoration: none;
+      box-shadow: 0 0 24px rgba(52,211,153,0.35);
+      transition: box-shadow 200ms, transform 150ms;
+      position: relative; overflow: hidden;
+    }
+    .nav-cta::after, .btn-primary::after, .btn-hero::after {
+      content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+      transform: skewX(-20deg); animation: shimmer 5s infinite;
+    }
+    @keyframes shimmer { 0% { left: -100%; } 20% { left: 200%; } 100% { left: 200%; } }
+    .nav-cta:hover { box-shadow: 0 0 36px rgba(52,211,153,0.55); transform: translateY(-1px); }
+
+    /* ── HERO ── */
+    .hero {
+      padding: 120px 0 100px;
+      text-align: center;
+      position: relative;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 16px; border-radius: 999px; margin-bottom: 28px;
+      border: 1px solid rgba(52,211,153,0.3);
+      background: rgba(52,211,153,0.08);
+      font-family: var(--fontMono); font-size: 11px; color: var(--accent);
+      letter-spacing: 1.2px; text-transform: uppercase;
+    }
+    .hero-badge-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent);
+      animation: pulse-dot 2s infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.5; transform: scale(1.4); }
+    }
+    .hero h1 {
+      font-family: var(--fontDisplay); font-size: clamp(40px, 7vw, 72px);
+      font-weight: 700; line-height: 1.08; letter-spacing: -1.5px;
+      margin-bottom: 24px;
+    }
+    .hero h1 .gradient-text {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 60%, var(--accent3) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero-sub {
+      max-width: 620px; margin: 0 auto 48px;
+      font-size: 18px; color: var(--text-dim); line-height: 1.65;
+    }
+    .hero-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 14px 32px; border-radius: 10px; font-size: 15px; font-weight: 600;
+      background: linear-gradient(135deg, var(--accent), var(--accentDim));
+      color: #fff; text-decoration: none;
+      box-shadow: 0 0 40px rgba(52,211,153,0.4), 0 4px 16px rgba(0,0,0,0.4);
+      transition: box-shadow 200ms, transform 150ms;
+      border: none; cursor: pointer; position: relative; overflow: hidden;
+    }
+    .btn-primary:hover { box-shadow: 0 0 56px rgba(52,211,153,0.6), 0 4px 20px rgba(0,0,0,0.5); transform: translateY(-2px); }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 28px; border-radius: 10px; font-size: 15px; font-weight: 500;
+      background: var(--panel); border: 1px solid var(--border);
+      color: var(--text-dim); text-decoration: none;
+      transition: border-color 200ms, background 200ms, color 150ms, transform 150ms;
+    }
+    .btn-secondary:hover { border-color: var(--border-glow); background: var(--panel-hover); color: var(--text); transform: translateY(-1px); }
+
+    /* ── HERO PIPELINE VISUAL ── */
+    .hero-pipeline {
+      margin: 72px auto 0; max-width: 860px;
+      padding: 32px 40px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 0 80px rgba(52,211,153,0.06), inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+    .pipeline-label {
+      font-family: var(--fontMono); font-size: 10px; color: var(--text-mute);
+      text-transform: uppercase; letter-spacing: 1.4px; margin-bottom: 24px; text-align: left;
+    }
+    .pipeline-nodes {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
+      align-items: center; position: relative;
+    }
+    .pipeline-node {
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      position: relative;
+    }
+    .pipeline-node:not(:last-child)::after {
+      content: '→';
+      position: absolute; right: -12px; top: 20px;
+      color: var(--accent); font-size: 16px; opacity: 0.6;
+    }
+    .node-icon {
+      width: 56px; height: 56px; border-radius: 12px;
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      transition: border-color 300ms, box-shadow 300ms;
+    }
+    .node-icon.active {
+      border-color: var(--accent);
+      background: rgba(52,211,153,0.12);
+      box-shadow: 0 0 24px rgba(52,211,153,0.3);
+      animation: glow-pulse 2s infinite;
+    }
+    .node-icon.done {
+      border-color: var(--ok);
+      background: rgba(52,211,153,0.08);
+    }
+    @keyframes glow-pulse {
+      0%, 100% { box-shadow: 0 0 24px rgba(52,211,153,0.3); }
+      50%       { box-shadow: 0 0 40px rgba(52,211,153,0.55); }
+    }
+    .node-name {
+      font-family: var(--fontDisplay); font-size: 12px; font-weight: 600;
+      color: var(--text); text-align: center;
+    }
+    .node-sub {
+      font-family: var(--fontMono); font-size: 9.5px; color: var(--text-mute);
+      text-align: center; line-height: 1.4;
+    }
+    .node-status {
+      font-family: var(--fontMono); font-size: 9px; letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+    .node-status.done  { color: var(--ok); }
+    .node-status.active { color: var(--accent); animation: blink 1.2s step-start infinite; }
+    .node-status.idle  { color: var(--text-mute); }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* ── SECTIONS ── */
+    section { padding: 100px 0; }
+    .section-eyebrow {
+      font-family: var(--fontMono); font-size: 11px; color: var(--text-mute);
+      text-transform: uppercase; letter-spacing: 2px; margin-bottom: 20px;
+      display: inline-flex; align-items: center; gap: 12px;
+    }
+    .section-eyebrow::before {
+      content: ''; display: block; width: 24px; height: 1px; background: var(--text-mute);
+    }
+    .section-header.centered .section-eyebrow { justify-content: center; }
+    .section-title {
+      font-family: var(--fontDisplay); font-size: clamp(32px, 5vw, 48px);
+      font-weight: 700; letter-spacing: -1px; margin-bottom: 20px; line-height: 1.1;
+    }
+    .section-sub {
+      font-size: 16px; color: var(--text-dim); max-width: 560px; line-height: 1.7;
+    }
+    .section-header { margin-bottom: 56px; }
+    .section-header.centered { text-align: center; }
+    .section-header.centered .section-sub { margin: 0 auto; }
+
+    /* ── DIVIDER ── */
+    .divider {
+      border: none; border-top: 1px solid var(--border);
+      margin: 0;
+    }
+
+    /* ── FEATURE GRID (BENTO) ── */
+    .feature-grid { 
+      display: grid; grid-template-columns: repeat(4, 1fr); 
+      grid-auto-rows: minmax(180px, auto); gap: 20px; 
+    }
+    @media (max-width: 900px) { .feature-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 600px) { .feature-grid { grid-template-columns: 1fr; } }
+    
+    .feature-card.bento-large { grid-column: span 2; grid-row: span 2; }
+    .feature-card.bento-wide  { grid-column: span 2; grid-row: span 1; }
+    @media (max-width: 600px) { 
+      .feature-card.bento-large, .feature-card.bento-wide { grid-column: span 1; grid-row: auto; } 
+    }
+
+    .feature-card {
+      padding: 32px; border-radius: 20px;
+      background: rgba(255, 255, 255, 0.015);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.05);
+      transition: all 400ms cubic-bezier(0.25, 0.8, 0.25, 1);
+      cursor: default; display: flex; flex-direction: column; justify-content: flex-end;
+    }
+    .feature-card.bento-large { justify-content: space-between; }
+    .feature-card:hover {
+      border-color: rgba(52,211,153,0.3);
+      background: rgba(255, 255, 255, 0.03);
+      box-shadow: 0 12px 40px rgba(52,211,153,0.15), inset 0 1px 0 rgba(255,255,255,0.1);
+      transform: translateY(-4px);
+    }
+    .feature-icon {
+      width: 44px; height: 44px; border-radius: 10px; margin-bottom: 18px;
+      background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.2);
+      display: flex; align-items: center; justify-content: center; font-size: 20px;
+    }
+    .feature-title {
+      font-family: var(--fontDisplay); font-size: 16px; font-weight: 600;
+      margin-bottom: 10px;
+    }
+    .feature-desc { font-size: 13.5px; color: var(--text-dim); line-height: 1.65; }
+
+    /* ── AGENTS ── */
+    .agents-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 700px) { .agents-layout { grid-template-columns: 1fr; } }
+    .agent-card {
+      display: flex; gap: 20px; align-items: flex-start;
+      padding: 28px 32px; border-radius: 18px;
+      background: rgba(255, 255, 255, 0.015);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.05);
+      transition: all 400ms cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+    .agent-card:hover {
+      border-color: rgba(52,211,153,0.3);
+      background: rgba(255, 255, 255, 0.03);
+      box-shadow: 0 12px 40px rgba(52,211,153,0.15), inset 0 1px 0 rgba(255,255,255,0.1);
+      transform: translateY(-4px);
+    }
+    .agent-index {
+      font-family: var(--fontMono); font-size: 11px; color: var(--accent);
+      background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.2);
+      border-radius: 6px; padding: 4px 9px; white-space: nowrap; flex-shrink: 0;
+      margin-top: 3px;
+    }
+    .agent-title {
+      font-family: var(--fontDisplay); font-size: 16px; font-weight: 600; margin-bottom: 6px;
+    }
+    .agent-model {
+      font-family: var(--fontMono); font-size: 10.5px; color: var(--accent);
+      margin-bottom: 10px;
+    }
+    .agent-desc { font-size: 13.5px; color: var(--text-dim); line-height: 1.65; }
+
+    /* ── HOW IT'S DIFFERENT ── */
+    .diff-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+    @media (max-width: 700px) { .diff-grid { grid-template-columns: 1fr; } }
+    .diff-card {
+      padding: 32px; border-radius: 18px;
+      background: rgba(255, 255, 255, 0.015);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.05);
+      transition: all 400ms cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+    .diff-card:hover {
+      border-color: rgba(52,211,153,0.3);
+      background: rgba(255, 255, 255, 0.03);
+      box-shadow: 0 12px 40px rgba(52,211,153,0.15), inset 0 1px 0 rgba(255,255,255,0.1);
+      transform: translateY(-4px);
+    }
+    .diff-tag {
+      display: inline-block; padding: 3px 10px; border-radius: 6px; margin-bottom: 14px;
+      font-family: var(--fontMono); font-size: 10px; letter-spacing: 0.8px; text-transform: uppercase;
+    }
+    .diff-tag.vs-others { background: rgba(248,113,113,0.12); color: var(--danger); border: 1px solid rgba(248,113,113,0.2); }
+    .diff-tag.guardianloop { background: rgba(52,211,153,0.12); color: var(--accent); border: 1px solid rgba(52,211,153,0.2); }
+    .diff-title { font-family: var(--fontDisplay); font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+    .diff-body { font-size: 13.5px; color: var(--text-dim); line-height: 1.65; }
+
+    /* ── STATS BAR ── */
+    .stats-bar {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 1px; background: var(--border);
+      border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
+    }
+    @media (max-width: 700px) { .stats-bar { grid-template-columns: repeat(2, 1fr); } }
+    .stat-cell {
+      padding: 32px 28px; background: var(--bg2); text-align: center;
+    }
+    .stat-value {
+      font-family: var(--fontDisplay); font-size: 40px; font-weight: 700; line-height: 1;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      margin-bottom: 8px;
+    }
+    .stat-label { font-size: 13px; color: var(--text-dim); }
+
+    /* ── INSTRUCTIONS ── */
+    .instructions-section { background: var(--bg2); }
+    .steps-layout { display: flex; flex-direction: column; gap: 0; }
+    .step-row {
+      display: grid; grid-template-columns: 80px 1fr; gap: 24px;
+      align-items: stretch; padding: 32px 0;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+    .step-row:last-child { border-bottom: none; }
+    .step-number-wrap { display: flex; flex-direction: column; align-items: center; gap: 0; }
+    .step-num {
+      width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;
+      background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.25);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--fontDisplay); font-size: 20px; font-weight: 700; color: var(--accent);
+    }
+    .step-line {
+      flex: 1; width: 1px; background: rgba(52,211,153,0.15); margin: 8px 0;
+    }
+    .step-row:last-child .step-line { display: none; }
+    .step-content { padding: 6px 0 32px; }
+    .step-title {
+      font-family: var(--fontDisplay); font-size: 18px; font-weight: 600;
+      margin-bottom: 10px;
+    }
+    .step-desc { font-size: 14px; color: var(--text-dim); line-height: 1.7; margin-bottom: 14px; }
+    .code-block {
+      background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;
+      padding: 14px 18px; font-family: var(--fontMono); font-size: 12.5px;
+      color: var(--accent3); line-height: 1.9; overflow-x: auto;
+    }
+    .code-block .comment { color: var(--text-mute); }
+    .step-note {
+      display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+      padding: 6px 12px; border-radius: 6px;
+      background: color-mix(in oklab, var(--warn) 15%, transparent); border: 1px solid color-mix(in oklab, var(--warn) 30%, transparent);
+      font-size: 12.5px; color: var(--warn);
+    }
+
+    /* ── CTA SECTION ── */
+    .cta-section {
+      padding: 120px 0; text-align: center;
+    }
+    .cta-glow {
+      position: absolute; width: 600px; height: 400px;
+      background: radial-gradient(ellipse at center, rgba(52,211,153,0.15), transparent 70%);
+      left: 50%; top: 50%; transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .cta-section .container { position: relative; }
+    .cta-section h2 {
+      font-family: var(--fontDisplay); font-size: clamp(32px, 5vw, 54px);
+      font-weight: 700; letter-spacing: -0.8px; margin-bottom: 20px; line-height: 1.1;
+    }
+    .cta-section p {
+      font-size: 17px; color: var(--text-dim); max-width: 520px; margin: 0 auto 48px; line-height: 1.7;
+    }
+    .btn-hero {
+      display: inline-flex; align-items: center; gap: 12px;
+      padding: 18px 40px; border-radius: 12px; font-size: 16px; font-weight: 700;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accentDim) 100%);
+      color: #fff; text-decoration: none;
+      box-shadow: 0 0 60px rgba(52,211,153,0.5), 0 8px 32px rgba(0,0,0,0.5);
+      transition: box-shadow 200ms, transform 150ms;
+      position: relative; overflow: hidden;
+    }
+    .btn-hero:hover { box-shadow: 0 0 80px rgba(52,211,153,0.7), 0 8px 40px rgba(0,0,0,0.6); transform: translateY(-3px); }
+    .btn-arrow { font-size: 20px; transition: transform 200ms; }
+    .btn-hero:hover .btn-arrow { transform: translateX(4px); }
+    .cta-disclaimer { margin-top: 20px; font-size: 12px; color: var(--text-mute); }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 0;
+      text-align: center;
+      font-family: var(--fontMono); font-size: 11px; color: var(--text-mute);
+    }
+    footer a { color: var(--text-dim); text-decoration: none; transition: color 150ms; }
+    footer a:hover { color: var(--accent); }
+
+    /* ── TAG PILL ── */
+    .pill {
+      display: inline-block; padding: 2px 9px; border-radius: 5px; font-size: 11px;
+      font-family: var(--fontMono); letter-spacing: 0.5px;
+    }
+    .pill-ok { background: color-mix(in oklab, var(--ok) 15%, transparent); color: var(--ok); border: 1px solid color-mix(in oklab, var(--ok) 30%, transparent); }
+    .pill-info { background: color-mix(in oklab, var(--accent2) 15%, transparent); color: var(--accent2); border: 1px solid color-mix(in oklab, var(--accent2) 30%, transparent); }
+    .pill-warn { background: color-mix(in oklab, var(--warn) 15%, transparent); color: var(--warn); border: 1px solid color-mix(in oklab, var(--warn) 30%, transparent); }
+
+    /* ── SCROLL ANIMATION ── */
+    .reveal { opacity: 0; transform: translateY(30px); transition: opacity 0.8s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.8s cubic-bezier(0.25, 0.8, 0.25, 1); }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+    .feature-grid > :nth-child(1) { transition-delay: 0ms; }
+    .feature-grid > :nth-child(2) { transition-delay: 100ms; }
+    .feature-grid > :nth-child(3) { transition-delay: 200ms; }
+    .feature-grid > :nth-child(4) { transition-delay: 100ms; }
+    .feature-grid > :nth-child(5) { transition-delay: 200ms; }
+    .feature-grid > :nth-child(6) { transition-delay: 300ms; }
+  </style>
+</head>
+<body>
+
+  <!-- ════════════ NAV ════════════ -->
+  <nav>
+    <div class="nav-inner">
+      <a href="#" class="nav-logo">GuardianLoop</a>
+      <div class="nav-links">
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#agents" class="nav-link">Agents</a>
+        <a href="#different" class="nav-link">Why Us</a>
+        <a href="#setup" class="nav-link">Setup</a>
+        <a href="/dashboard/" class="nav-cta">Try the Tool →</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ════════════ HERO ════════════ -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">
+        <div class="hero-badge-dot"></div>
+        Autonomous · Gemini 2.5 Pro
+      </div>
+      <h1 class="reveal">
+        Autonomous<br>
+        <span style="font-style: italic; color: var(--accent); font-weight: 400;">Security Pipeline.</span>
+      </h1>
+      <p class="hero-sub">
+        GuardianLoop is a four-agent autonomous pipeline that scans your code for security weaknesses, classifies them with real CVE data, generates verified patches using chain-of-thought reasoning, and red-team validates every fix in an isolated Docker sandbox.
+      </p>
+      <div class="hero-actions">
+        <a href="/dashboard/" class="btn-primary" id="hero-cta">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Launch Security Console
+        </a>
+        <a href="#setup" class="btn-secondary">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Setup guide
+        </a>
+      </div>
+
+      <!-- Pipeline visualization -->
+      <div class="hero-pipeline reveal">
+        <div class="pipeline-label">Pipeline · GuardianLoop · 5 agents</div>
+        <div class="pipeline-nodes">
+          <div class="pipeline-node">
+            <div class="node-icon">🔍</div>
+            <div class="node-name">Scout</div>
+            <div class="node-sub">Semgrep + Bandit</div>
+          </div>
+          <div class="pipeline-node">
+            <div class="node-icon">🏷️</div>
+            <div class="node-name">Classifier</div>
+            <div class="node-sub">NVD · CVE/CVSS</div>
+          </div>
+          <div class="pipeline-node">
+            <div class="node-icon">⚡</div>
+            <div class="node-name">Fixer</div>
+            <div class="node-sub">Gemini 2.5 Pro · CoT</div>
+          </div>
+          <div class="pipeline-node">
+            <div class="node-icon">🧪</div>
+            <div class="node-name">Red-Team</div>
+            <div class="node-sub">Docker sandbox</div>
+          </div>
+          <div class="pipeline-node">
+            <div class="node-icon">📋</div>
+            <div class="node-name">Report</div>
+            <div class="node-sub">JSON + Markdown</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ STATS ════════════ -->
+  <div class="container">
+    <div class="stats-bar reveal">
+      <div class="stat-cell"><div class="stat-value">5</div><div class="stat-label">Autonomous agents</div></div>
+      <div class="stat-cell"><div class="stat-value">3</div><div class="stat-label">Input methods</div></div>
+      <div class="stat-cell"><div class="stat-value">9.8</div><div class="stat-label">Max CVSS handled</div></div>
+      <div class="stat-cell"><div class="stat-value">30s</div><div class="stat-label">Sandbox timeout</div></div>
+    </div>
+  </div>
+
+  <hr class="divider" style="margin-top: 80px;" />
+
+  <!-- ════════════ FEATURES ════════════ -->
+  <section id="features">
+    <div class="container">
+      <div class="section-header centered reveal">
+        <div class="section-eyebrow">Platform features</div>
+        <h2 class="section-title">Every stage of the<br><span style="font-style: italic; color: var(--accent); font-weight: 400;">vulnerability lifecycle.</span></h2>
+        <p class="section-sub">From a single file upload to a full GitHub PR scan — GuardianLoop handles the entire security review lifecycle without manual intervention.</p>
+      </div>
+      <div class="feature-grid">
+        <div class="feature-card reveal bento-large">
+          <div class="feature-icon">🎯</div>
+          <div class="feature-title">Multi-mode Ingress</div>
+          <div class="feature-desc">Upload a file, paste code directly, point to a GitHub Pull Request URL, or use the built-in demo. GuardianLoop handles Python (.py) and C/C++ (.c, .cpp) source files up to 1 MB.</div>
+        </div>
+        <div class="feature-card reveal bento-wide">
+          <div class="feature-icon">🔬</div>
+          <div class="feature-title">SAST-powered Scanning</div>
+          <div class="feature-desc">Scout runs both Semgrep (with custom + registry rules) and Bandit against your code. Findings are emitted as structured Finding objects for the pipeline to consume.</div>
+        </div>
+        <div class="feature-card reveal bento-wide">
+          <div class="feature-icon">📊</div>
+          <div class="feature-title">CVE & CVSS Classification</div>
+          <div class="feature-desc">Each finding is enriched with real CVE identifiers and CVSS 3.1 scores pulled from the NVD API. You see exactly how severe each weakness is, with exploitability context.</div>
+        </div>
+        <div class="feature-card reveal bento-wide">
+          <div class="feature-icon">🤖</div>
+          <div class="feature-title">AI-powered Patching</div>
+          <div class="feature-desc">The Fixer agent uses Gemini 2.5 Pro with chain-of-thought prompting (k=5 reasoning steps). It produces a diff patch and a transparent audit trail of its reasoning chain.</div>
+        </div>
+        <div class="feature-card reveal bento-wide">
+          <div class="feature-icon">🛡️</div>
+          <div class="feature-title">Red-Team Sandbox Verification</div>
+          <div class="feature-desc">Every patch is verified by running the original exploit against the patched code inside a hardened Docker container — network-isolated, read-only, memory-capped at 512 MB.</div>
+        </div>
+        <div class="feature-card reveal bento-large">
+          <div class="feature-icon">📡</div>
+          <div class="feature-title">Live Security Console</div>
+          <div class="feature-desc">Watch scans run in real time via the dashboard. See the GuardianLoop pipeline progress agent-by-agent, stream structlog output live, and open the full report when complete.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- ════════════ AGENTS ════════════ -->
+  <section id="agents">
+    <div class="container">
+      <div class="section-header reveal">
+        <div class="section-eyebrow">The pipeline</div>
+        <h2 class="section-title">Five agents.<br><span style="font-style: italic; color: var(--accent); font-weight: 400;">One shared state.</span></h2>
+        <p class="section-sub">Built as an autonomous pipeline with a single Pydantic PipelineState object that flows through every node. Each agent is async, testable, and independently mockable.</p>
+      </div>
+      <div class="agents-layout">
+        <div class="agent-card reveal">
+          <div class="agent-index">01</div>
+          <div>
+            <div class="agent-title">Scout</div>
+            <div class="agent-model">semgrep 1.62 · bandit 1.7.5</div>
+            <div class="agent-desc">Runs Semgrep with the full custom + community ruleset alongside Bandit for Python-specific checks. Emits structured <code style="color:var(--accent3);font-family:var(--fontMono);font-size:12px">Finding</code> objects with file, line, rule ID, snippet, and CWE tag.</div>
+          </div>
+        </div>
+        <div class="agent-card reveal">
+          <div class="agent-index">02</div>
+          <div>
+            <div class="agent-title">Classifier</div>
+            <div class="agent-model">NVD API · gemini-2.5-flash (optional LLM path)</div>
+            <div class="agent-desc">Maps each CWE to real-world CVE records from the National Vulnerability Database. Enriches findings with CVSS 3.1 severity scores, attack vectors, and exploitability summaries.</div>
+          </div>
+        </div>
+        <div class="agent-card reveal">
+          <div class="agent-index">03</div>
+          <div>
+            <div class="agent-title">Fixer</div>
+            <div class="agent-model">gemini-2.5-pro · chain-of-thought k=5</div>
+            <div class="agent-desc">Uses Gemini 2.5 Pro with chain-of-thought prompting. Produces a unified diff patch and a multi-step reasoning chain that feeds the pedagogical audit report. Falls back to Gemini 2.5 Flash on failure.</div>
+          </div>
+        </div>
+        <div class="agent-card reveal">
+          <div class="agent-index">04</div>
+          <div>
+            <div class="agent-title">Red-Team</div>
+            <div class="agent-model">docker sandbox · semgrep fallback</div>
+            <div class="agent-desc">Runs the original exploit input against the patched code in an isolated container (<code style="color:var(--accent3);font-family:var(--fontMono);font-size:12px">--network=none --read-only --memory=512m</code>). On failure, loops back to Fixer for up to 3 iterations.</div>
+          </div>
+        </div>
+        <div class="agent-card reveal" style="grid-column: span 2;">
+          <div class="agent-index">05</div>
+          <div>
+            <div class="agent-title">Report</div>
+            <div class="agent-model">JSON + Markdown writers</div>
+            <div class="agent-desc">Terminal node that writes the complete run artifacts: <code style="color:var(--accent3);font-family:var(--fontMono);font-size:12px">run_summary.json</code>, <code style="color:var(--accent3);font-family:var(--fontMono);font-size:12px">enriched_findings.json</code>, <code style="color:var(--accent3);font-family:var(--fontMono);font-size:12px">patches.json</code>, <code style="color:var(--accent3);font-family:var(--fontMono);font-size:12px">verifications.json</code>, and a structured <code style="color:var(--accent3);font-family:var(--fontMono);font-size:12px">report.md</code> with What / Why / How sections for every finding. All downloadable from the dashboard.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- ════════════ HOW IT'S DIFFERENT ════════════ -->
+  <section id="different">
+    <div class="container">
+      <div class="section-header centered reveal">
+        <div class="section-eyebrow">Why GuardianLoop</div>
+        <h2 class="section-title">Not just a scanner.<br><span style="font-style: italic; color: var(--accent); font-weight: 400;">A closed-loop system.</span></h2>
+        <p class="section-sub">Traditional SAST tools flag issues and leave the rest to you. GuardianLoop closes the loop — it patches, verifies, and explains, end to end.</p>
+      </div>
+      <div class="diff-grid">
+        <div class="diff-card reveal">
+          <span class="diff-tag vs-others">Traditional SAST</span>
+          <div class="diff-title">Finds vulnerabilities, stops there</div>
+          <div class="diff-body">Tools like standalone Semgrep or Bandit give you a list of findings with line numbers. No CVE context, no fix, no verification — security engineers spend hours triaging and manually patching.</div>
+        </div>
+        <div class="diff-card reveal">
+          <span class="diff-tag guardianloop">GuardianLoop</span>
+          <div class="diff-title">Finds, enriches, patches, and verifies</div>
+          <div class="diff-body">The four-agent pipeline produces a verified, sandbox-tested patch alongside a transparent AI reasoning chain — in under a minute. Nothing to triage, nothing to manually fix.</div>
+        </div>
+        <div class="diff-card reveal">
+          <span class="diff-tag vs-others">AI Code Assistants</span>
+          <div class="diff-title">Suggest fixes without verification</div>
+          <div class="diff-body">LLM-based code assistants can produce plausible-looking patches that still fail under adversarial input. There's no automated adversarial check to confirm the exploit is actually blocked.</div>
+        </div>
+        <div class="diff-card reveal">
+          <span class="diff-tag guardianloop">GuardianLoop</span>
+          <div class="diff-title">Red-team verifies every patch in a sandbox</div>
+          <div class="diff-body">The Red-Team agent reruns the exact exploit inside a hardened Docker container against the patched code. Only patches that demonstrably block the attack are accepted. Failed patches trigger a Fixer retry loop.</div>
+        </div>
+        <div class="diff-card reveal">
+          <span class="diff-tag vs-others">Black-box pipelines</span>
+          <div class="diff-title">You don't know why the fix works</div>
+          <div class="diff-body">Automated tools rarely explain reasoning. When a patch is produced, developers have no insight into the taint flow analysis or why the specific change resolves the weakness class.</div>
+        </div>
+        <div class="diff-card reveal">
+          <span class="diff-tag guardianloop">GuardianLoop</span>
+          <div class="diff-title">Full chain-of-thought audit trail</div>
+          <div class="diff-body">Every patch includes a multi-step CoT reasoning chain from Gemini 2.5 Pro that explains the taint flow, the fix strategy, and why the patch preserves semantics. Rendered as a readable What / Why / How report.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- ════════════ SETUP INSTRUCTIONS ════════════ -->
+  <section id="setup" class="instructions-section" style="padding-top: 100px; padding-bottom: 120px;">
+    <div class="container" style="max-width: 1100px;">
+      
+      <!-- Top header -->
+      <div class="reveal" style="margin-bottom: 60px;">
+        <div style="font-family: var(--fontMono); font-size: 11px; letter-spacing: 2px; color: var(--text-mute); text-transform: uppercase; margin-bottom: 20px; display: flex; align-items: center; gap: 12px;">
+          <div style="width: 24px; height: 1px; background: var(--text-mute);"></div> GET STARTED
+        </div>
+        <h2 style="font-family: 'Playfair Display', serif; font-size: 56px; font-weight: 700; color: #fff; line-height: 1.1; margin-bottom: 24px; letter-spacing: -1px;">
+          Up <span style="font-style: italic; color: #34d399; font-weight: 400;">in four commands.</span>
+        </h2>
+        <p style="font-size: 18px; color: var(--text-dim); max-width: 650px; line-height: 1.6;">
+          Drop your GOOGLE_API_KEY into .env, build the two sandbox images, and run the end-to-end demo on a known-vulnerable sample.
+        </p>
+      </div>
+
+      <!-- Two column layout -->
+      <div class="reveal" style="display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 60px; align-items: center;">
+        
+        <!-- Left: Terminal -->
+        <div style="background: #0f1220; border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
+          <!-- Terminal Header -->
+          <div style="display: flex; align-items: center; gap: 8px; padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2);">
+            <div style="width: 10px; height: 10px; border-radius: 50%; background: #333642;"></div>
+            <div style="width: 10px; height: 10px; border-radius: 50%; background: #333642;"></div>
+            <div style="width: 10px; height: 10px; border-radius: 50%; background: #333642;"></div>
+            <div style="margin-left: 10px; font-family: var(--fontMono); font-size: 12px; color: var(--text-mute);">~/GuardianLoop</div>
+          </div>
+          <!-- Terminal Body -->
+          <div style="padding: 24px 20px; font-family: var(--fontMono); font-size: 13px; line-height: 1.8; color: var(--text-dim);">
+            <div><span style="color: #34d399;">$</span> <span style="color: #fff;">make install</span> <span style="color: var(--text-mute);">pip install -e .[dev]</span> <span style="color: #34d399;">✓ 47 packages resolved</span></div>
+            
+            <div style="margin-top: 12px;"><span style="color: #34d399;">$</span> <span style="color: #fff;">cp .env.example .env</span> <span style="color: var(--text-mute);">add GOOGLE_API_KEY (and _2 / _3 for rotation)</span></div>
+            
+            <div style="margin-top: 12px;"><span style="color: #34d399;">$</span> <span style="color: #fff;">make docker-build</span> <span style="color: var(--text-mute);">building guardianloop/python-sandbox building guardianloop/cpp-sandbox</span> <span style="color: #34d399;">✓ images ready</span></div>
+            
+            <div style="margin-top: 12px;"><span style="color: #34d399;">$</span> <span style="color: #fff;">make demo</span> <span style="color: var(--text-mute);">scout → classifier → fixer → red_team → report</span> <span style="color: #34d399;">✓ 2 findings · 2 patches HELD · 0 exploitable</span></div>
+            <div style="margin-top: 4px; color: var(--text-mute);">runs/20260522T172343Z/report.md</div>
+          </div>
+        </div>
+
+        <!-- Right: Content -->
+        <div>
+          <h3 style="font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; color: #fff; margin-bottom: 16px; letter-spacing: -0.5px;">
+            Then read the report.
+          </h3>
+          <p style="font-size: 15px; color: var(--text-dim); line-height: 1.6; margin-bottom: 32px;">
+            Every run drops a full audit bundle into <code style="font-family: var(--fontMono); font-size: 13px; color: var(--text-mute);">runs/&lt;timestamp&gt;/</code> — per-stage JSON, per-agent structlog files, and a three-section <code style="font-family: var(--fontMono); font-size: 13px; color: var(--text-mute);">report.md</code> built for engineers learning the vulnerability, not just closing the ticket.
+          </p>
+          <div style="display: flex; gap: 16px; align-items: center;">
+            <a href="#agents" style="padding: 12px 24px; background: #fff; color: #000; border-radius: 30px; font-size: 14px; font-weight: 600; text-decoration: none; transition: transform 200ms; box-shadow: 0 0 20px rgba(255,255,255,0.2);">Read the architecture</a>
+            <a href="#agents" style="padding: 12px 24px; background: rgba(255,255,255,0.03); color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 30px; font-size: 14px; font-weight: 600; text-decoration: none; transition: background 200ms;">Browse the agents</a>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <hr class="divider" />
+
+  <!-- ════════════ CTA ════════════ -->
+  <section class="cta-section">
+    <div class="cta-glow"></div>
+    <div class="container">
+      <div class="reveal">
+        <div class="section-eyebrow" style="margin-bottom:20px;">Ready to go?</div>
+        <h2>Stop triaging.<br>Start shipping secure code.</h2>
+        <p>Drop a file into the scanner and GuardianLoop's autonomous pipeline will have a patch — verified against the exploit — in under a minute.</p>
+        <a href="/dashboard/" class="btn-hero">
+          Launch Security Console
+          <span class="btn-arrow">→</span>
+        </a>
+        <div class="cta-disclaimer">The server must be running on <code style="font-family:var(--fontMono)">localhost:8080</code> · No data leaves your machine</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ FOOTER ════════════ -->
+  <footer>
+    <div class="container">
+      <span>GuardianLoop · autonomous security pipeline</span>
+      &nbsp;·&nbsp;
+      <span>built with Gemini 2.5 Pro · Semgrep · Docker</span>
+      &nbsp;·&nbsp;
+      <a href="/dashboard/">Security Console</a>
+      &nbsp;·&nbsp;
+      <a href="/healthz">Health</a>
+    </div>
+  </footer>
+
+  <script>
+    // ── Scroll reveal ──
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) { e.target.classList.add('visible'); }
+      });
+    }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+    // ── Smooth anchor scroll ──
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+      a.addEventListener('click', e => {
+        const target = document.querySelector(a.getAttribute('href'));
+        if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      });
+    });
+  </script>
+</body>
+</html>

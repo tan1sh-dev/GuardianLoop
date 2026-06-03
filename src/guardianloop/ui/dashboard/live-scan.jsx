@@ -167,7 +167,7 @@ const IdleScreen = ({ onNav }) => {
     </div>
 
     {/* static grey pipeline */}
-    <Panel title="pipeline · langgraph" padding={0}>
+    <Panel title="pipeline · guardianloop" padding={0}>
       <PipelineViz activeIdx={-1} completedIdx={0} loopActive={false} />
     </Panel>
 
@@ -289,7 +289,7 @@ const ActiveScanScreen = ({ tweaks, runId, onNav, onComplete }) => {
       </div>
 
       {/* pipeline viz */}
-      <Panel title="pipeline · langgraph" padding={0}>
+      <Panel title="pipeline · guardianloop" padding={0}>
         <PipelineViz activeIdx={vizActiveIdx} completedIdx={vizDoneCount} loopActive={false} speed={speed} />
       </Panel>
 

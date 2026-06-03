@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GuardianLoop · Mission Control</title>
+  <title>GuardianLoop · Security Console</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -17,7 +17,7 @@
       background: var(--bg, #06070b);
       color: var(--text, #e8ecff);
       font-family: var(--fontUI, "Inter", system-ui, sans-serif);
-      font-size: 14px;
+      font-size: 15.5px;
       -webkit-font-smoothing: antialiased;
       text-rendering: optimizeLegibility;
     }
@@ -59,21 +59,53 @@
     .gl-boot {
       position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
       flex-direction: column; gap: 14px; background: var(--bg, #06070b); z-index: 9999;
-      font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px;
-      color: var(--textMute, #525a82); letter-spacing: 1.2px; text-transform: uppercase;
+      font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 18px;
+      color: #34d399; letter-spacing: 2px; text-transform: uppercase;
+      text-shadow: 0 0 12px rgba(52, 211, 153, 0.4);
+      animation: gl-blink 1.6s infinite;
     }
-    .gl-boot svg { animation: gl-pulse 1.6s infinite; }
+    /* Route entry animation */
+    .gl-main-content {
+      animation: gl-fade 0.35s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    }
+
+    /* Panel hover animation */
+    .gl-panel {
+      transition: border-color 0.25s, transform 0.25s, box-shadow 0.25s !important;
+    }
+    .gl-panel:hover {
+      border-color: color-mix(in oklab, var(--accent) 35%, var(--border)) !important;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25), 0 0 15px color-mix(in oklab, var(--accent) 6%, transparent);
+      transform: translateY(-1px);
+    }
+
+    /* Button hover animation */
+    .gl-btn {
+      transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s !important;
+    }
+    .gl-btn:hover:not(:disabled) {
+      box-shadow: 0 0 16px color-mix(in oklab, var(--accent) 25%, transparent);
+      transform: translateY(-0.5px);
+    }
+    .gl-btn:active:not(:disabled) {
+      transform: translateY(0.5px);
+    }
+
+    /* Navigation button hover animation */
+    .gl-nav-btn {
+      transition: background 0.25s, border-color 0.25s, color 0.25s, transform 0.25s, padding-left 0.25s !important;
+    }
+    .gl-nav-btn:hover {
+      color: var(--text) !important;
+      background: color-mix(in oklab, var(--accent) 8%, transparent) !important;
+      padding-left: 16px !important;
+    }
   </style>
 </head>
 <body>
   <div id="root">
     <div class="gl-boot">
-      <svg width="42" height="42" viewBox="0 0 24 24" fill="none"
-           stroke="#c084fc" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z" />
-        <path d="M9 12l2 2 4-4" />
-      </svg>
-      <span>booting mission control…</span>
+      <span>booting security console…</span>
     </div>
   </div>
 
@@ -84,12 +116,12 @@
 
   <!-- Design files load in dependency order; each one attaches its public
        symbols to window via Object.assign so the next can reference them. -->
-  <script type="text/babel" data-presets="react" src="data.jsx?v=4"></script>
-  <script type="text/babel" data-presets="react" src="ui-kit.jsx?v=4"></script>
-  <script type="text/babel" data-presets="react" src="live-scan.jsx?v=4"></script>
-  <script type="text/babel" data-presets="react" src="screens.jsx?v=4"></script>
-  <script type="text/babel" data-presets="react" src="learning.jsx?v=4"></script>
-  <script type="text/babel" data-presets="react" src="app.jsx?v=4"></script>
+  <script type="text/babel" data-presets="react" src="data.jsx?v=13"></script>
+  <script type="text/babel" data-presets="react" src="ui-kit.jsx?v=13"></script>
+  <script type="text/babel" data-presets="react" src="live-scan.jsx?v=13"></script>
+  <script type="text/babel" data-presets="react" src="screens.jsx?v=13"></script>
+  <script type="text/babel" data-presets="react" src="learning.jsx?v=13"></script>
+  <script type="text/babel" data-presets="react" src="app.jsx?v=13"></script>
 
   <!-- Hydrate from /api/runs (or fall back to mock data) and render the App. -->
   <script type="text/babel" data-presets="react" src="bootstrap.jsx"></script>

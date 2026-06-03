@@ -118,3 +118,70 @@ def load_config(config_path: Path | None = None) -> Config:
     data["github_webhook_secret"] = os.getenv("GITHUB_WEBHOOK_SECRET") or None
     data["semgrep_app_token"] = os.getenv("SEMGREP_APP_TOKEN") or None
     return Config(**data)
+
+
+def save_config(updates: dict, config_path: Path | None = None) -> None:
+    """Save non-secret config fields to config.yaml and secrets to .env."""
+    path = config_path or DEFAULT_CONFIG_PATH
+    yaml_data: dict = {}
+    if path.exists():
+        with path.open(encoding="utf-8") as f:
+            yaml_data = yaml.safe_load(f) or {}
+
+    # Define which keys go where
+    yaml_keys = {
+        "model_name", "fixer_model", "fixer_fallback_model", "classifier_model",
+        "max_loop_iterations", "scout_timeout_seconds", "gemini_timeout_seconds",
+        "sandbox_timeout_seconds", "nvd_timeout_seconds", "python_sandbox_image",
+        "cpp_sandbox_image", "nvd_rate_limit_without_key", "nvd_rate_limit_with_key",
+        "runs_dir"
+    }
+
+    env_keys = {
+        "google_api_key": "GOOGLE_API_KEY",
+        "google_api_key_2": "GOOGLE_API_KEY_2",
+        "google_api_key_3": "GOOGLE_API_KEY_3",
+        "nvd_api_key": "NVD_API_KEY",
+        "github_webhook_secret": "GITHUB_WEBHOOK_SECRET",
+        "semgrep_app_token": "SEMGREP_APP_TOKEN",
+    }
+
+    # Update yaml
+    for k, v in updates.items():
+        if k in yaml_keys:
+            yaml_data[k] = v
+
+    with path.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(yaml_data, f, default_flow_style=False, sort_keys=False)
+
+    # Update .env
+    env_updates = {}
+    for k, env_name in env_keys.items():
+        if k in updates:
+            val = str(updates[k])
+            # Skip if it is masked
+            if val.startswith("•") or val.startswith("*") or not val.strip():
+                if not val.strip():
+                    env_updates[env_name] = ""
+                continue
+            env_updates[env_name] = val.strip()
+
+    if env_updates:
+        env_file = path.parent / ".env"
+        lines = []
+        if env_file.exists():
+            lines = env_file.read_text(encoding="utf-8").splitlines()
+
+        for env_name, new_val in env_updates.items():
+            os.environ[env_name] = new_val
+            found = False
+            for idx, line in enumerate(lines):
+                if line.strip().startswith(f"{env_name}="):
+                    lines[idx] = f"{env_name}={new_val}"
+                    found = True
+                    break
+            if not found:
+                lines.append(f"{env_name}={new_val}")
+
+        env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+

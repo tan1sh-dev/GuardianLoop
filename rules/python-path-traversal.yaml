@@ -1,0 +1,15 @@
+rules:
+  - id: python-cwe22-path-traversal
+    languages: [python]
+    severity: ERROR
+    message: >
+      Path traversal detected. Do not open files with user-controlled variables
+      without sanitization (CWE-22).
+    metadata:
+      cwe: CWE-22
+    patterns:
+      - pattern-either:
+          - pattern: open($FILE, ...)
+          - pattern: open($FILE)
+      - pattern-not: open("...", ...)
+      - pattern-not: open("...")

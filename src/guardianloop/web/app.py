@@ -26,11 +26,11 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from guardianloop.config import load_config
+from guardianloop.config import load_config, save_config
 from guardianloop.graph import build_graph, make_run_dir
 from guardianloop.ingress.local import SUPPORTED_EXTENSIONS
 from guardianloop.ingress.paste import ingest_paste
@@ -39,6 +39,7 @@ from guardianloop.logging_setup import get_agent_logger
 from guardianloop.state import PipelineState
 
 DASHBOARD_DIR = Path(__file__).resolve().parent.parent / "ui" / "dashboard"
+LANDING_DIR   = Path(__file__).resolve().parent.parent / "ui" / "landing"
 
 app = FastAPI(title="GuardianLoop Web", version="0.1.0")
 
@@ -192,7 +193,12 @@ async def system_status() -> dict:
 
 
 @app.get("/")
-async def root_redirect() -> RedirectResponse:
+async def landing_page() -> FileResponse:
+    """Serve the GuardianLoop landing page."""
+    landing_index = LANDING_DIR / "index.html"
+    if landing_index.exists():
+        return FileResponse(str(landing_index), media_type="text/html")
+    # Fallback: redirect straight to dashboard if landing page is missing
     return RedirectResponse(url="/dashboard/")
 
 
@@ -435,7 +441,52 @@ async def scan_pr(req: PRRequest) -> dict:
     return {"run_id": run_dir.name}
 
 
-# ---------- static dashboard (must be last) ----------
+
+class SaveConfigReq(BaseModel):
+    fixer_model: str | None = None
+    classifier_model: str | None = None
+    max_loop_iterations: int | None = None
+    sandbox_timeout_seconds: int | None = None
+    google_api_key: str | None = None
+    google_api_key_2: str | None = None
+    google_api_key_3: str | None = None
+    nvd_api_key: str | None = None
+
+
+def _mask_key(val: str | None) -> str:
+    if not val:
+        return ""
+    if len(val) <= 4:
+        return "••••"
+    return "••••" + val[-4:]
+
+
+@app.get("/api/config")
+async def get_config() -> dict:
+    cfg = load_config()
+    return {
+        "fixer_model": cfg.fixer_model,
+        "classifier_model": cfg.classifier_model,
+        "max_loop_iterations": cfg.max_loop_iterations,
+        "sandbox_timeout_seconds": cfg.sandbox_timeout_seconds,
+        "google_api_key": _mask_key(cfg.google_api_key),
+        "google_api_key_2": _mask_key(os.getenv("GOOGLE_API_KEY_2")),
+        "google_api_key_3": _mask_key(os.getenv("GOOGLE_API_KEY_3")),
+        "nvd_api_key": _mask_key(cfg.nvd_api_key),
+    }
+
+
+@app.post("/api/config")
+async def update_config(req: SaveConfigReq) -> dict:
+    updates = {k: v for k, v in req.model_dump().items() if v is not None}
+    try:
+        save_config(updates)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"status": "ok"}
+
+
+# ---------- static files (must be last) ----------
 
 if DASHBOARD_DIR.is_dir():
     app.mount("/dashboard", StaticFiles(directory=str(DASHBOARD_DIR), html=True), name="dashboard")
@@ -446,3 +497,6 @@ else:
             status_code=500,
             detail=f"Dashboard not found at {DASHBOARD_DIR}.",
         )
+
+# Landing page static assets (CSS/fonts are loaded from CDN; no local assets needed)
+# The landing index.html itself is served by the /  route above via FileResponse.
