@@ -52,8 +52,8 @@ Get up and running locally in seconds.
 ### Installation
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/tan1sh-dev/GuardianLoop-Final.git
-   cd GuardianLoop-Final
+   git clone https://github.com/tan1sh-dev/GuardianLoop.git
+   cd GuardianLoop
    ```
 
 2. **Run the startup script:**
