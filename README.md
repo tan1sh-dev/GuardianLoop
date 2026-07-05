@@ -60,6 +60,7 @@ Get up and running locally in seconds.
    - **Windows:** `.\start.bat`
    - **macOS / Linux:** `bash start.sh`
 
+   *Note: Ensure Docker Desktop is open and running before executing the script.*
    *The script will verify Docker, prompt for your API key, build the sandboxes, and launch the web interface.*
 
 3. **Access the Dashboard:**
