@@ -1,0 +1,61 @@
+rules:
+
+  # CWE-22: tarfile.extractall — Zip Slip via directory traversal in archive
+  - id: python-cwe22-tarfile-extractall
+    languages: [python]
+    severity: ERROR
+    message: >
+      tarfile.extractall() extracts all members without validating their paths.
+      A malicious archive can contain entries like "../../etc/crontab" that
+      escape the target directory (Zip Slip / CWE-22). Iterate over members
+      and validate each path before extraction, or use the data_filter
+      parameter (Python 3.12+).
+    metadata:
+      cwe: CWE-22
+      owasp: A01:2021
+    pattern-either:
+      - pattern: $TAR.extractall(...)
+      - pattern: tarfile.open(...).extractall(...)
+
+  # CWE-22: tarfile.extract — single member Zip Slip
+  - id: python-cwe22-tarfile-extract
+    languages: [python]
+    severity: WARNING
+    message: >
+      tarfile.extract() extracts a single member without checking if its path
+      contains directory traversal sequences like "../" (CWE-22). Validate
+      the member name before extraction.
+    metadata:
+      cwe: CWE-22
+      owasp: A01:2021
+    patterns:
+      - pattern: $TAR.extract(...)
+
+  # CWE-22: zipfile.extractall — Zip Slip
+  - id: python-cwe22-zipfile-extractall
+    languages: [python]
+    severity: ERROR
+    message: >
+      zipfile.extractall() extracts all members without validating paths.
+      A crafted zip file can overwrite arbitrary files on the filesystem
+      (CWE-22). Iterate over namelist() and validate each path resolves
+      within the intended directory before extracting.
+    metadata:
+      cwe: CWE-22
+      owasp: A01:2021
+    pattern-either:
+      - pattern: $ZIP.extractall(...)
+      - pattern: zipfile.ZipFile(...).extractall(...)
+
+  # CWE-22: zipfile.extract — single member
+  - id: python-cwe22-zipfile-extract
+    languages: [python]
+    severity: WARNING
+    message: >
+      zipfile.extract() extracts a single member without checking for path
+      traversal sequences (CWE-22). Validate the member name before extraction.
+    metadata:
+      cwe: CWE-22
+      owasp: A01:2021
+    patterns:
+      - pattern: $ZIP.extract(...)

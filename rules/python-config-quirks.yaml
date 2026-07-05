@@ -1,0 +1,56 @@
+rules:
+
+  # CWE-1188: Mutable default argument
+  - id: python-cwe1188-mutable-default
+    languages: [python]
+    severity: WARNING
+    message: >
+      Function uses a mutable default argument (list or dict). The default
+      object is created once at function definition time and shared across
+      all calls, causing state leakage between invocations (CWE-1188).
+      Use None as the default and create the mutable inside the function:
+      def func(items=None): items = items or []
+    metadata:
+      cwe: CWE-1188
+      owasp: A04:2021
+    pattern-either:
+      - pattern: |
+          def $FUNC(..., $ARG=[], ...):
+              ...
+      - pattern: |
+          def $FUNC(..., $ARG={}, ...):
+              ...
+
+  # CWE-617: assert used for security/authorization checks
+  - id: python-cwe617-assert-security
+    languages: [python]
+    severity: ERROR
+    message: >
+      assert is used for a security or authorization check. Assert statements
+      are completely stripped when Python runs in optimized mode (-O flag),
+      silently removing the security check (CWE-617). Use an explicit
+      if-not-raise pattern: if not condition: raise PermissionError(...)
+    metadata:
+      cwe: CWE-617
+      owasp: A04:2021
+    patterns:
+      - pattern: assert $EXPR
+      - metavariable-regex:
+          metavariable: $EXPR
+          regex: (?i).*(admin|auth|permission|role|privilege|is_staff|is_superuser|is_authenticated|allowed|authorized|access).*
+
+  # CWE-377: tempfile.mktemp — insecure temp file, race condition
+  - id: python-cwe377-mktemp
+    languages: [python]
+    severity: ERROR
+    message: >
+      tempfile.mktemp() returns a filename that does not yet exist, but
+      does not create it atomically. An attacker can create the file between
+      the name generation and the caller's open(), leading to symlink
+      attacks or information disclosure (CWE-377). Use
+      tempfile.mkstemp() or tempfile.NamedTemporaryFile() instead.
+    metadata:
+      cwe: CWE-377
+      owasp: A09:2021
+    patterns:
+      - pattern: tempfile.mktemp(...)

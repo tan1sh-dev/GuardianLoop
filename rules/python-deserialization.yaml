@@ -1,0 +1,77 @@
+rules:
+
+  # CWE-502: pickle.loads — arbitrary code execution during deserialization
+  - id: python-cwe502-pickle-loads
+    languages: [python]
+    severity: ERROR
+    message: >
+      pickle.loads() deserializes arbitrary Python objects and can execute code
+      via the __reduce__ method. Never unpickle data from untrusted sources
+      (CWE-502). Use json.loads() or a schema-validated format instead.
+    metadata:
+      cwe: CWE-502
+      owasp: A08:2021
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)
+      - pattern: _pickle.loads(...)
+      - pattern: cPickle.loads(...)
+      - pattern: cPickle.load(...)
+
+  # CWE-502: pickle.Unpickler — same risk as pickle.load
+  - id: python-cwe502-pickle-unpickler
+    languages: [python]
+    severity: ERROR
+    message: >
+      pickle.Unpickler can execute arbitrary code during deserialization
+      (CWE-502). Avoid deserializing untrusted data with pickle.
+    metadata:
+      cwe: CWE-502
+      owasp: A08:2021
+    patterns:
+      - pattern: pickle.Unpickler(...)
+
+  # CWE-502: yaml.load without SafeLoader
+  - id: python-cwe502-yaml-load
+    languages: [python]
+    severity: ERROR
+    message: >
+      yaml.load() without Loader=yaml.SafeLoader can instantiate arbitrary
+      Python objects and execute code (CWE-502). Always use
+      yaml.safe_load() or yaml.load(data, Loader=yaml.SafeLoader).
+    metadata:
+      cwe: CWE-502
+      owasp: A08:2021
+    patterns:
+      - pattern: yaml.load(...)
+      - pattern-not: yaml.load(..., Loader=yaml.SafeLoader, ...)
+      - pattern-not: yaml.load(..., Loader=yaml.CSafeLoader, ...)
+      - pattern-not: yaml.safe_load(...)
+
+  # CWE-502: marshal.loads — code execution via bytecode
+  - id: python-cwe502-marshal-loads
+    languages: [python]
+    severity: ERROR
+    message: >
+      marshal.loads() deserializes Python bytecode objects and can execute
+      arbitrary code (CWE-502). Never unmarshal untrusted data.
+    metadata:
+      cwe: CWE-502
+      owasp: A08:2021
+    pattern-either:
+      - pattern: marshal.loads(...)
+      - pattern: marshal.load(...)
+
+  # CWE-502: shelve.open — uses pickle internally
+  - id: python-cwe502-shelve
+    languages: [python]
+    severity: WARNING
+    message: >
+      shelve.open() uses pickle internally for serialization and is vulnerable
+      to the same deserialization attacks (CWE-502). Do not open shelve files
+      from untrusted sources.
+    metadata:
+      cwe: CWE-502
+      owasp: A08:2021
+    patterns:
+      - pattern: shelve.open(...)

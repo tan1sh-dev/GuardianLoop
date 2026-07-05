@@ -10,6 +10,7 @@ JSON artifact writer. Emits:
 
 from __future__ import annotations
 
+import datetime
 import json
 from pathlib import Path
 
@@ -64,9 +65,19 @@ def write_json_artifacts(state: PipelineState) -> Path:
         except (OSError, json.JSONDecodeError):
             fixer_usage = {}
 
+    try:
+        started_at = datetime.datetime.strptime(run_dir.name, "%Y%m%dT%H%M%SZ").replace(tzinfo=datetime.timezone.utc)
+        duration_seconds = (datetime.datetime.now(datetime.timezone.utc) - started_at).total_seconds()
+        started_at_str = started_at.isoformat()
+    except ValueError:
+        started_at_str = run_dir.name
+        duration_seconds = 0.0
+
     summary = {
         "source_file": str(state.source_file),
         "run_dir": str(run_dir),
+        "started_at": started_at_str,
+        "duration_seconds": duration_seconds,
         "language": state.language,
         "loop_count": state.loop_count,
         "iterations_run": state.loop_count + 1,
@@ -74,14 +85,17 @@ def write_json_artifacts(state: PipelineState) -> Path:
         "error": state.error,
         "totals": {
             "findings": len(state.findings),
+            "raw_findings": state.raw_findings_count or len(state.findings),
             "enriched": len(state.enriched_findings),
             "patches": len(state.patches),
             "verifications": len(state.verification_results),
             "patches_held": patches_held,
             "patches_failed": patches_failed,
+            "findings_skipped": len(state.skipped_findings),
             "findings_unpatched": len(state.enriched_findings)
             - len(final_verif),
         },
+        "skipped_findings": state.skipped_findings,
         "fixer_usage": fixer_usage,
     }
     (run_dir / "run_summary.json").write_text(_dump(summary), encoding="utf-8")

@@ -83,10 +83,16 @@ def _render_how(
     ef: EnrichedFinding,
     patch: Patch | None,
     verif: VerificationResult | None,
+    skipped: dict | None = None,
 ) -> list[str]:
     lines = ["## How", ""]
     if patch is None:
-        lines.append("_No patch was produced for this finding._")
+        if skipped:
+            lines.append(f"_Finding was skipped._")
+            lines.append("")
+            lines.append(f"**Reason**: {skipped.get('reason', 'Unknown')}")
+        else:
+            lines.append("_No patch was produced for this finding._")
         lines.append("")
         return lines
 
@@ -141,6 +147,7 @@ def write_markdown_report(state: PipelineState) -> Path:
         f = ef.finding
         patch = latest_patch.get(f.id)
         verif = latest_verif.get(f.id)
+        skipped = next((s for s in state.skipped_findings if s.get("finding_id") == f.id), None)
 
         lines.append("---")
         lines.append("")
@@ -153,7 +160,7 @@ def write_markdown_report(state: PipelineState) -> Path:
         lines.append("")
         lines.extend(_render_what(ef))
         lines.extend(_render_why(ef, patch))
-        lines.extend(_render_how(ef, patch, verif))
+        lines.extend(_render_how(ef, patch, verif, skipped))
 
     report_path.write_text("\n".join(lines), encoding="utf-8")
     return report_path

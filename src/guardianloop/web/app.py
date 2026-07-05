@@ -103,18 +103,26 @@ def _summarize_run(run_dir: Path) -> dict | None:
         except Exception:
             pass
 
-    if findings == 0:
-        status = "complete"
-    elif failed > 0 and patched == 0:
-        status = "failed"
+    summary_status = summary.get("status", "unknown")
+    unpatched = findings - patched - failed
+    if summary_status == "complete":
+        if findings > 0 and unpatched > 0:
+            status = "partial"
+        elif failed > 0 and patched == 0:
+            status = "failed"
+        else:
+            status = "complete"
     else:
-        status = "complete"
+        status = summary_status
+
+    raw_findings = int(totals.get("raw_findings") or findings)
 
     return {
         "id": run_dir.name,
         "source": source,
         "language": language,
         "findings": findings,
+        "raw_findings": raw_findings,
         "patched": patched,
         "status": status,
         "duration": duration,
@@ -338,6 +346,14 @@ async def get_run_logs(run_id: str) -> dict:
 _DEMO_FILE = Path(__file__).resolve().parents[3] / "samples" / "demo_sqli.py"
 
 
+async def _check_preflight(cfg) -> list[str]:
+    from guardianloop.preflight import validate_config
+    preflight = await validate_config(cfg)
+    if not preflight.is_valid:
+        raise HTTPException(status_code=400, detail=" ".join(preflight.errors))
+    return preflight.warnings
+
+
 @app.post("/api/scan/rerun/{run_id}")
 async def scan_rerun(run_id: str) -> dict:
     """Re-scan the same source file from an existing run."""
@@ -363,9 +379,10 @@ async def scan_rerun(run_id: str) -> dict:
                 detail=f"Source file '{source_path.name}' not found on disk.",
             )
     cfg = load_config()
+    warnings = await _check_preflight(cfg)
     run_dir = make_run_dir(cfg.runs_dir)
     _kick(source_path, run_dir)
-    return {"run_id": run_dir.name}
+    return {"run_id": run_dir.name, "warnings": warnings}
 
 
 @app.post("/api/scan/demo")
@@ -373,9 +390,10 @@ async def scan_demo() -> dict:
     if not _DEMO_FILE.exists():
         raise HTTPException(status_code=404, detail="Demo file not found.")
     cfg = load_config()
+    warnings = await _check_preflight(cfg)
     run_dir = make_run_dir(cfg.runs_dir)
     _kick(_DEMO_FILE, run_dir)
-    return {"run_id": run_dir.name}
+    return {"run_id": run_dir.name, "warnings": warnings}
 
 
 @app.post("/api/scan/upload")
@@ -389,10 +407,11 @@ async def scan_upload(file: UploadFile = File(...)) -> dict:
     if len(data) > 1_048_576:
         raise HTTPException(status_code=413, detail="File too large (max 1 MB).")
     cfg = load_config()
+    warnings = await _check_preflight(cfg)
     run_dir = make_run_dir(cfg.runs_dir)
     source_path = ingest_upload(data, file.filename, run_dir)
     _kick(source_path, run_dir)
-    return {"run_id": run_dir.name}
+    return {"run_id": run_dir.name, "warnings": warnings}
 
 
 class PasteRequest(BaseModel):
@@ -406,10 +425,11 @@ async def scan_paste(req: PasteRequest) -> dict:
     if not code:
         raise HTTPException(status_code=400, detail="Code cannot be empty.")
     cfg = load_config()
+    warnings = await _check_preflight(cfg)
     run_dir = make_run_dir(cfg.runs_dir)
     source_path = ingest_paste(code, req.filename, run_dir)
     _kick(source_path, run_dir)
-    return {"run_id": run_dir.name}
+    return {"run_id": run_dir.name, "warnings": warnings}
 
 
 class PRRequest(BaseModel):
@@ -423,6 +443,7 @@ async def scan_pr(req: PRRequest) -> dict:
 
     token = req.token or os.getenv("GITHUB_TOKEN") or None
     cfg = load_config()
+    warnings = await _check_preflight(cfg)
     run_dir = make_run_dir(cfg.runs_dir)
     try:
         paths = await ingest_github_pr(req.url, run_dir, github_token=token)
@@ -438,7 +459,7 @@ async def scan_pr(req: PRRequest) -> dict:
             detail="No supported source files (.py / .cpp) found in this PR.",
         )
     _kick(paths[0], run_dir)
-    return {"run_id": run_dir.name}
+    return {"run_id": run_dir.name, "warnings": warnings}
 
 
 

@@ -1,0 +1,36 @@
+rules:
+  - id: cpp-cwe401-memory-leak
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      Memory allocated with new or malloc is not freed before the pointer goes out of scope,
+      causing a memory leak (CWE-401). Ensure all allocated memory is properly freed using
+      delete, delete[], or free(), or prefer smart pointers (std::unique_ptr, std::shared_ptr).
+    metadata:
+      cwe: CWE-401
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $TYPE* $PTR = new $TYPE(...);
+              ...
+              return ...;
+          - pattern: |
+              $TYPE* $PTR = new $TYPE[...];
+              ...
+              return ...;
+          - pattern: |
+              $PTR = malloc(...);
+              ...
+              return ...;
+      - pattern-not-inside: |
+          ...
+          delete $PTR;
+          ...
+      - pattern-not-inside: |
+          ...
+          delete[] $PTR;
+          ...
+      - pattern-not-inside: |
+          ...
+          free($PTR);
+          ...

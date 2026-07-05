@@ -1,0 +1,23 @@
+rules:
+
+  # CWE-330: random module used for security-sensitive values
+  - id: python-cwe330-insecure-random
+    languages: [python]
+    severity: WARNING
+    message: >
+      The standard random module uses the Mersenne Twister PRNG, which is
+      completely predictable if an attacker observes enough outputs (CWE-330).
+      Do not use it for tokens, passwords, session IDs, nonces, or any
+      security-sensitive purpose. Use the secrets module instead:
+      secrets.token_hex(16), secrets.token_urlsafe(32), secrets.choice().
+    metadata:
+      cwe: CWE-330
+      owasp: A02:2021
+    pattern-either:
+      - pattern: random.random()
+      - pattern: random.randint(...)
+      - pattern: random.choice(...)
+      - pattern: random.randrange(...)
+      - pattern: random.sample(...)
+      - pattern: random.getrandbits(...)
+      - pattern: random.uniform(...)

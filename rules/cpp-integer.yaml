@@ -63,3 +63,102 @@ rules:
       owasp: A05:2021
     patterns:
       - pattern: $X / 0
+
+  # CWE-190: Unchecked arithmetic used as allocation/memory size
+  - id: cpp-cwe190-arithmetic-overflow
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      Unchecked arithmetic (addition, subtraction, or multiplication) is used
+      as a size argument for a memory operation. If the arithmetic overflows or
+      wraps around, the resulting allocation or copy will be the wrong size,
+      leading to buffer overflow or heap corruption (CWE-190).
+      Use __builtin_add_overflow / __builtin_sub_overflow / __builtin_mul_overflow
+      to detect overflow before using the result.
+    metadata:
+      cwe: CWE-190
+      owasp: A03:2021
+    pattern-either:
+      - pattern: malloc($A + $B)
+      - pattern: malloc($A - $B)
+      - pattern: calloc($A + $B, ...)
+      - pattern: calloc(..., $A + $B)
+      - pattern: realloc($PTR, $A + $B)
+      - pattern: realloc($PTR, $A - $B)
+      - pattern: memcpy($DST, $SRC, $A + $B)
+      - pattern: memcpy($DST, $SRC, $A - $B)
+      - pattern: memmove($DST, $SRC, $A + $B)
+      - pattern: alloca($A + $B)
+      - pattern: new $TYPE[$A + $B]
+      - pattern: new $TYPE[$A - $B]
+      - pattern: new $TYPE[$A * $B]
+
+  # CWE-129: Unvalidated array/vector index access
+  - id: cpp-cwe129-unvalidated-index
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      Accessing an array or std::vector index without validating that the index is
+      non-negative and less than the size of the container can cause out-of-bounds reads/writes (CWE-129).
+      Validate the index before accessing elements.
+    metadata:
+      cwe: CWE-129
+      owasp: A03:2021
+    patterns:
+      - pattern: $VECTOR[$INDEX]
+      - pattern-not: $VECTOR[sizeof(...)]
+      - pattern-not: $VECTOR[0]
+      - pattern-not: $VECTOR[1]
+      - pattern-not: $VECTOR[2]
+
+  # CWE-195 / CWE-681: Signed integer used where unsigned is expected
+  - id: cpp-cwe195-signed-unsigned-size
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      A signed integer is implicitly converted to an unsigned type (size_t) in
+      a memory or allocation context. If the signed value is negative, it becomes
+      a very large unsigned number, causing enormous allocation or out-of-bounds
+      access (CWE-195 / CWE-681). Validate that the value is non-negative before
+      use, or use an unsigned type from the start.
+    metadata:
+      cwe: CWE-195
+      owasp: A03:2021
+    pattern-either:
+      - pattern: malloc((int)$N)
+      - pattern: calloc((int)$N, ...)
+      - pattern: memcpy($DST, $SRC, (int)$N)
+      - pattern: memmove($DST, $SRC, (int)$N)
+      - pattern: memset($DST, $VAL, (int)$N)
+      - pattern: new $TYPE[(int)$N]
+
+  # CWE-369: Unvalidated atoi/strtol result used as divisor
+  - id: cpp-cwe369-atoi-divisor
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      The result of atoi() or strtol() is used directly as a divisor without
+      checking that it is non-zero. User-supplied input of "0" causes division
+      by zero and undefined behaviour (CWE-369). Validate the denominator before
+      dividing.
+    metadata:
+      cwe: CWE-369
+      owasp: A05:2021
+    pattern-either:
+      - pattern: |
+          $D = atoi(...);
+          ...
+          $X / $D;
+      - pattern: |
+          $D = strtol(...);
+          ...
+          $X / $D;
+      - pattern: |
+          $D = atoi(...);
+          ...
+          $X % $D;
+      - pattern: |
+          $D = strtol(...);
+          ...
+          $X % $D;
+

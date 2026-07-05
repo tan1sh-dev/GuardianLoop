@@ -19,8 +19,19 @@ const LearningScreen = () => {
         <h1 style={{ fontFamily: "var(--fontDisplay)", fontSize: 36, fontWeight: 600, margin: "8px 0 6px", letterSpacing: -0.6 }}>
           Learn what GuardianLoop just patched.
         </h1>
-        <div style={{ color: "var(--textDim)", fontSize: 14, maxWidth: 720 }}>
-          Every report is structured What → Why → How. This tab pulls those into a curriculum: read the class of bug, replay the exploit, write the patch yourself.
+        <div style={{ display: "flex", gap: 16, marginTop: 14, marginBottom: 20, flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 220px", padding: 12, background: "var(--panelAlt)", borderLeft: "3px solid var(--accent)", borderRadius: "0 6px 6px 0" }}>
+            <div style={{ fontFamily: "var(--fontMono)", fontSize: 10, color: "var(--accent)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>1. Understand (What → Why → How)</div>
+            <div style={{ color: "var(--textDim)", fontSize: 12.5, lineHeight: 1.5 }}>Study the root cause, severity, real-world impact (CVEs), and secure remediations.</div>
+          </div>
+          <div style={{ flex: "1 1 220px", padding: 12, background: "var(--panelAlt)", borderLeft: "3px solid var(--danger)", borderRadius: "0 6px 6px 0" }}>
+            <div style={{ fontFamily: "var(--fontMono)", fontSize: 10, color: "var(--danger)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>2. Replay Exploit</div>
+            <div style={{ color: "var(--textDim)", fontSize: 12.5, lineHeight: 1.5 }}>Simulate active exploitation vectors inside the secure sandbox environment.</div>
+          </div>
+          <div style={{ flex: "1 1 220px", padding: 12, background: "var(--panelAlt)", borderLeft: "3px solid var(--ok)", borderRadius: "0 6px 6px 0" }}>
+            <div style={{ fontFamily: "var(--fontMono)", fontSize: 10, color: "var(--ok)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>3. Verify Patch</div>
+            <div style={{ color: "var(--textDim)", fontSize: 12.5, lineHeight: 1.5 }}>Inspect the exact diff of the AI fixer's patch successfully passing the test suite.</div>
+          </div>
         </div>
       </div>
 
@@ -128,9 +139,9 @@ const Playground = () => {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {CWE_CATALOG.map(c => (
-            <Btn key={c.id} primary={cweId === c.id} onClick={() => setCweId(c.id)}>{c.id} · {c.name}</Btn>
+            <Btn key={c.id} primary={cweId === c.id} onClick={() => setCweId(c.id)} style={{ fontSize: 11, padding: "6px 10px" }}>{c.id}</Btn>
           ))}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -150,7 +161,7 @@ const Playground = () => {
         <div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
             <Icon name="shield" size={14} style={{ color: "var(--ok)" }} />
-            <span style={{ fontFamily: "var(--fontMono)", fontSize: 11, color: "var(--ok)", textTransform: "uppercase", letterSpacing: 1 }}>patched · {cwe.diff.split("\n").filter(l=>l.startsWith("+")).length} lines added</span>
+            <span style={{ fontFamily: "var(--fontMono)", fontSize: 11, color: "var(--ok)", textTransform: "uppercase", letterSpacing: 1 }}>patched</span>
           </div>
           {showPatched ? <CodeBlock code={cwe.diff} lang="diff" showDiff /> : <CodeBlock code={cwe.patchedCode} lang={cwe.language} />}
         </div>
@@ -180,7 +191,7 @@ const Toggle = ({ checked, onChange }) => (
 const ExploitReplay = () => {
   const [cweId, setCweId] = uS2("CWE-89");
   const [step, setStep] = uS2(0);
-  const [playing, setPlaying] = uS2(false);
+  const [playing, setPlaying] = uS2(true);
   const cwe = CWE_BY_ID[cweId];
 
   const steps = {
@@ -205,6 +216,55 @@ const ExploitReplay = () => {
       { t: "marker",   label: "stdout contains /etc/passwd", detail: `root:x:0:0:root:/root:/bin/bash` },
       { t: "verdict",  label: "exit 0 · exploit reproduced", detail: `harness greps for "root:x:0:0" → match` },
     ],
+    "CWE-22": [
+      { t: "stdin",    label: "attacker inputs path",     detail: `../../../etc/passwd` },
+      { t: "process",  label: "path joins unsafely",      detail: `filepath = "/var/www/uploads/../../../etc/passwd"` },
+      { t: "fs",       label: "traverses parent root",    detail: `resolves outside upload directory boundary` },
+      { t: "marker",   label: "output contains system pass", detail: `root:x:0:0:root:/root:/bin/bash` },
+      { t: "verdict",  label: "exploit reproduced",       detail: `harness matches user-shadow patterns` },
+    ],
+    "CWE-798": [
+      { t: "stdin",    label: "scans repository files",   detail: `searching code variables and static files` },
+      { t: "process",  label: "credential match triggered", detail: `finds secret string: "SuperSecretDbPassword123!"` },
+      { t: "auth",     label: "login with credentials",   detail: `submits credentials dynamically to login port` },
+      { t: "marker",   label: "harness obtains access",   detail: `API returns successful response containing tokens` },
+      { t: "verdict",  label: "credentials compromised",  detail: `static credential extraction bypasses environment config` },
+    ],
+    "CWE-79": [
+      { t: "stdin",    label: "enters script template",   detail: `<script>alert(1)</script>` },
+      { t: "process",  label: "renders greeting body",    detail: `html = "<div>Welcome back, <script>alert(1)</script>!</div>"` },
+      { t: "browser",  label: "executes unescaped script", detail: `browser reads input as code rather than text` },
+      { t: "marker",   label: "malicious code executes",   detail: `session data and cookies exposed` },
+      { t: "verdict",  label: "XSS script parsed",        detail: `harness detects script tag trigger in active window` },
+    ],
+    "CWE-327": [
+      { t: "stdin",    label: "extracts user hash",       detail: `MD5 password hash extracted: 098f6bcd4621d373cade4e832627b4f6` },
+      { t: "process",  label: "precomputed lookups",      detail: `performs dictionary checks or MD5 reverse lookups` },
+      { t: "decrypt",  label: "preimage successfully cracked", detail: `hash cracked instantly using common dictionary maps` },
+      { t: "marker",   label: "reveals raw credentials",  detail: `plaintext credentials match target input` },
+      { t: "verdict",  label: "vulnerable algorithm proved", detail: `insecure cryptoprimitive lacks modern work factor` },
+    ],
+    "CWE-601": [
+      { t: "stdin",    label: "requests redirect link",   detail: `http://target.com/redirect?next=http://attacker.com` },
+      { t: "process",  label: "generates redirect payload", detail: `Location: http://attacker.com` },
+      { t: "browser",  label: "redirects page target",    detail: `user automatically forwarded to untrusted domain` },
+      { t: "marker",   label: "phishing landing reached",  detail: `loads lookalike malicious server site` },
+      { t: "verdict",  label: "unvalidated redirect holds", detail: `harness verifies destination URL changed successfully` },
+    ],
+    "CWE-502": [
+      { t: "stdin",    label: "crafts binary string",     detail: `cos\nsystem\n(S'id'\ntR.` },
+      { t: "process",  label: "loads unmarshalled packet", detail: `pickle.loads(cookie_data)` },
+      { t: "exploit",  label: "deserialization executes",  detail: `executes custom OS injection on object creation` },
+      { t: "marker",   label: "retrieves command response", detail: `prints execution result` },
+      { t: "verdict",  label: "arbitrary code run",       detail: `harness triggers remote shell payload execution` },
+    ],
+    "CWE-200": [
+      { t: "stdin",    label: "sends malformed query",    detail: `violates primary key validation parameters` },
+      { t: "process",  label: "exception handler triggered", detail: `format_exc() constructs stack trace` },
+      { t: "expose",   label: "prints traceback response", detail: `stack detail printed inside API JSON body` },
+      { t: "marker",   label: "internal details leaked",  detail: `source file path and DB variables exposed` },
+      { t: "verdict",  label: "system config leaked",     detail: `harness parses internal application stack structures` },
+    ],
   };
 
   const current = steps[cweId];
@@ -218,9 +278,9 @@ const ExploitReplay = () => {
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
         {CWE_CATALOG.map(c => (
-          <Btn key={c.id} primary={cweId === c.id} onClick={() => { setCweId(c.id); setStep(0); setPlaying(false); }}>{c.id}</Btn>
+          <Btn key={c.id} primary={cweId === c.id} onClick={() => { setCweId(c.id); setStep(0); setPlaying(true); }} style={{ fontSize: 11, padding: "6px 10px" }}>{c.id}</Btn>
         ))}
         <div style={{ flex: 1 }} />
         <Btn icon="refresh" onClick={() => { setStep(0); setPlaying(false); }}>Reset</Btn>
@@ -278,97 +338,269 @@ const ExploitReplay = () => {
 };
 
 // ---------- Bug quiz ----------
-const QUIZ = [
-  {
-    code: `def render(name):\n    return f"<h1>Hello {name}</h1>"`,
-    lang: "python",
-    answers: ["CWE-79", "CWE-89", "CWE-78", "no bug"],
-    correct: 0,
-    explain: "Direct interpolation of user input into HTML — that's reflected XSS, CWE-79. Use a templating engine that escapes by default.",
-  },
-  {
-    code: `void copy(char *src) {\n  char dst[16];\n  memcpy(dst, src, strlen(src));\n}`,
-    lang: "cpp",
-    answers: ["CWE-89", "CWE-121", "CWE-78", "no bug"],
-    correct: 1,
-    explain: "memcpy with strlen of an attacker-controlled string and no bounds check — classic stack buffer overflow (CWE-121).",
-  },
-  {
-    code: `cur.execute("SELECT * FROM t WHERE id = ?", (uid,))`,
-    lang: "python",
-    answers: ["CWE-89", "CWE-78", "CWE-79", "no bug"],
-    correct: 3,
-    explain: "Parameterized query, value passed as bind. The driver puts uid in the data plane — no injection possible.",
-  },
-];
+// QUIZ_MODULES is globally loaded from quizData.jsx
 
 const BugQuiz = () => {
-  const [i, setI] = uS2(0);
+  const [setupStep, setSetupStep] = uS2("difficulty"); // "difficulty" | "module" | "playing"
+  const [difficulty, setDifficulty] = uS2(null);
+  const [moduleKey, setModuleKey] = uS2(null);
+
+  const [questions, setQuestions] = uS2([]);
+  const [qIndex, setQIndex] = uS2(0);
   const [picked, setPicked] = uS2(null);
+  
+  // Gamification state
   const [score, setScore] = uS2(0);
-  const q = QUIZ[i];
+  const [streak, setStreak] = uS2(0);
+  const [timeLeft, setTimeLeft] = uS2(30);
+  const [hintUsed, setHintUsed] = uS2(false);
+  const hiddenAnswersRef = uR2([]);
+
+  const resetTimer = (diff) => {
+    const timeMap = { Beginner: 60, Intermediate: 30, Expert: 15 };
+    setTimeLeft(timeMap[diff] || 30);
+  };
+
+  const startModule = (key) => {
+    setModuleKey(key);
+    const modQuestions = QUIZ_MODULES[key].questions;
+    // Shuffle and pick 10 questions
+    const shuffled = [...modQuestions].sort(() => 0.5 - Math.random()).slice(0, 10);
+    setQuestions(shuffled);
+    setQIndex(0);
+    setScore(0);
+    setStreak(0);
+    setPicked(null);
+    setHintUsed(false);
+    hiddenAnswersRef.current = [];
+    setSetupStep("playing");
+    resetTimer(difficulty);
+  };
+
+  // Timer effect
+  uE2(() => {
+    if (setupStep !== "playing" || picked !== null) return;
+    if (timeLeft <= 0) {
+      setPicked(-1); // -1 signifies timeout
+      setStreak(0);
+      return;
+    }
+    const id = setTimeout(() => setTimeLeft(t => t - 1), 1000);
+    return () => clearTimeout(id);
+  }, [setupStep, picked, timeLeft]);
 
   const pick = (idx) => {
     if (picked !== null) return;
     setPicked(idx);
-    if (idx === q.correct) setScore(s => s + 1);
+    const q = questions[qIndex];
+    if (idx === q.correct) {
+      setStreak(s => s + 1);
+      const timeBonus = timeLeft * 2;
+      const streakBonus = streak * 20;
+      const points = hintUsed ? 50 : 100 + streakBonus + timeBonus;
+      setScore(s => s + points);
+    } else {
+      setStreak(0);
+    }
   };
+
+  const nextQ = () => {
+    const nextIdx = qIndex + 1;
+    setQIndex(nextIdx);
+    setPicked(null);
+    setHintUsed(false);
+    hiddenAnswersRef.current = [];
+    resetTimer(difficulty);
+  };
+
+  if (setupStep === "difficulty") {
+    return (
+      <Panel padding={30} style={{ textAlign: "center", minHeight: 300, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
+        <Icon name="bug" size={48} style={{ color: "var(--accent)", marginBottom: 16 }} />
+        <h2 style={{ fontFamily: "var(--fontDisplay)", fontSize: 24, margin: "0 0 12px" }}>GuardianLoop Challenge</h2>
+        <div style={{ color: "var(--textDim)", maxWidth: 450, margin: "0 auto 24px", lineHeight: 1.6, textAlign: "center" }}>
+          Select your difficulty level. This will determine how much time you have per question.
+        </div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+          {[
+            { label: "Beginner", time: "60s/q" },
+            { label: "Intermediate", time: "30s/q" },
+            { label: "Expert", time: "15s/q" }
+          ].map(d => (
+            <Btn key={d.label} onClick={() => { setDifficulty(d.label); setSetupStep("module"); }} style={{ padding: "14px 20px" }}>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>{d.label}</div>
+              <div style={{ fontSize: 12, color: "var(--textMute)", marginTop: 4 }}>{d.time} timer</div>
+            </Btn>
+          ))}
+        </div>
+      </Panel>
+    );
+  }
+
+  if (setupStep === "module") {
+    return (
+      <Panel padding={30} style={{ textAlign: "center", minHeight: 300, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
+        <h2 style={{ fontFamily: "var(--fontDisplay)", fontSize: 24, margin: "0 0 12px" }}>Select a Module</h2>
+        <div style={{ color: "var(--textDim)", maxWidth: 450, margin: "0 auto 24px", lineHeight: 1.6, textAlign: "center" }}>
+          You've selected <span style={{ color: "var(--accent)", fontWeight: 600 }}>{difficulty}</span> difficulty. Choose a security domain to begin your 10-question challenge.
+        </div>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+          {Object.entries(QUIZ_MODULES).map(([key, mod]) => (
+            <Btn key={key} primary onClick={() => startModule(key)} style={{ padding: "14px 20px" }}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{mod.name}</div>
+              <div style={{ fontSize: 12, color: "var(--bg)", opacity: 0.8, marginTop: 4 }}>10 Questions</div>
+            </Btn>
+          ))}
+        </div>
+        <div style={{ marginTop: 24 }}>
+          <button onClick={() => setSetupStep("difficulty")} style={{ background: "transparent", border: "none", color: "var(--textMute)", cursor: "pointer", textDecoration: "underline", fontSize: 13 }}>
+            ← Back to Difficulty
+          </button>
+        </div>
+      </Panel>
+    );
+  }
+
+  const q = questions[qIndex];
+  
+  const useHint = () => {
+    if (hintUsed || picked !== null) return;
+    const wrongs = [];
+    q.answers.forEach((_, i) => { if (i !== q.correct) wrongs.push(i); });
+    hiddenAnswersRef.current = wrongs.sort(() => 0.5 - Math.random()).slice(0, 2);
+    setHintUsed(true);
+  };
+
+  const maxTime = { Beginner: 60, Intermediate: 30, Expert: 15 }[difficulty] || 30;
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14, fontFamily: "var(--fontMono)", fontSize: 12, color: "var(--textDim)" }}>
-        <span>question {i + 1} of {QUIZ.length}</span>
-        <span>score · {score}/{i + (picked !== null ? 1 : 0)}</span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 }}>
+        <div>
+          <div style={{ fontFamily: "var(--fontMono)", fontSize: 11, color: "var(--textMute)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
+            Question {qIndex + 1} / 10 · <span style={{ color: "var(--accent)" }}>{QUIZ_MODULES[moduleKey].name}</span>
+          </div>
+          <div style={{ fontFamily: "var(--fontDisplay)", fontSize: 22, fontWeight: 600 }}>
+            {q.prompt}
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontFamily: "var(--fontMono)", fontSize: 11, color: "var(--textMute)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
+            Score
+          </div>
+          <div style={{ fontFamily: "var(--fontMono)", fontSize: 22, fontWeight: 600, color: "var(--accent)" }}>
+            {score} <span style={{ fontSize: 16 }}>pts</span>
+          </div>
+        </div>
       </div>
 
-      <Panel padding={20}>
-        <div style={{ fontFamily: "var(--fontDisplay)", fontSize: 18, fontWeight: 600, marginBottom: 14 }}>
-          What's wrong with this code?
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, alignItems: "center" }}>
+        <div style={{ flex: 1, height: 4, background: "var(--panelAlt)", borderRadius: 2, overflow: "hidden", position: "relative" }}>
+          <div style={{
+            position: "absolute", top: 0, left: 0, height: "100%",
+            background: timeLeft > 10 ? "var(--ok)" : "var(--danger)",
+            width: `${(timeLeft / maxTime) * 100}%`, transition: "width 1s linear, background 300ms"
+          }} />
         </div>
-        <CodeBlock code={q.code} lang={q.lang} />
+        <div style={{ fontFamily: "var(--fontMono)", fontSize: 12, color: timeLeft <= 5 ? "var(--danger)" : "var(--text)", width: 40, textAlign: "right" }}>
+          {timeLeft}s
+        </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", padding: "4px 10px", background: streak >= 2 ? "color-mix(in oklab, var(--danger) 15%, transparent)" : "var(--panelAlt)", borderRadius: 12, border: `1px solid ${streak >= 2 ? "var(--danger)" : "var(--border)"}` }}>
+          <span style={{ fontSize: 14 }}>🔥</span>
+          <span style={{ fontFamily: "var(--fontMono)", fontSize: 12, fontWeight: 600, color: streak >= 2 ? "var(--danger)" : "var(--textDim)" }}>Streak x{streak}</span>
+        </div>
+      </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8, marginTop: 16 }}>
-          {q.answers.map((a, idx) => {
-            const isPicked = picked === idx;
-            const isCorrect = idx === q.correct;
-            const showResult = picked !== null;
-            const bg = !showResult ? "var(--panelAlt)"
-                     : isCorrect ? "color-mix(in oklab, var(--ok) 18%, var(--panelAlt))"
-                     : isPicked ? "color-mix(in oklab, var(--danger) 18%, var(--panelAlt))"
-                     : "var(--panelAlt)";
-            const border = !showResult ? "var(--border)"
-                         : isCorrect ? "var(--ok)"
-                         : isPicked ? "var(--danger)" : "var(--border)";
-            return (
-              <button key={a} onClick={() => pick(idx)} disabled={picked !== null} style={{
-                padding: "12px 14px", textAlign: "left",
-                background: bg, border: `1px solid ${border}`, borderRadius: 5,
-                color: "var(--text)", fontFamily: "var(--fontMono)", fontSize: 13,
-                cursor: picked === null ? "pointer" : "default",
-                transition: "all 120ms",
-              }}>
-                <span style={{ color: showResult && isCorrect ? "var(--ok)" : showResult && isPicked ? "var(--danger)" : "var(--textMute)", marginRight: 8 }}>
-                  {showResult && isCorrect ? "✓" : showResult && isPicked ? "✗" : String.fromCharCode(65 + idx)}
-                </span>
-                {a}
-              </button>
-            );
-          })}
+      <Panel padding={0} style={{ overflow: "hidden" }}>
+        <div style={{ padding: 20, borderBottom: "1px solid var(--border)" }}>
+          <CodeBlock code={q.code} lang={q.lang} />
         </div>
 
-        {picked !== null && (
-          <div style={{ marginTop: 14, padding: 14, background: "var(--panelAlt)", border: "1px solid var(--border)", borderLeft: "3px solid var(--accent)", borderRadius: 4, fontSize: 13.5, lineHeight: 1.6, color: "var(--textDim)" }}>
-            <div style={{ fontFamily: "var(--fontMono)", fontSize: 10, color: "var(--accent)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>explanation</div>
-            {q.explain}
+        <div style={{ padding: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontFamily: "var(--fontMono)", fontSize: 11, color: "var(--textMute)", textTransform: "uppercase", letterSpacing: 1 }}>
+              Select your answer
+            </div>
+            {!hintUsed && picked === null && (
+              <button onClick={useHint} style={{
+                background: "transparent", border: "1px solid var(--accent)", color: "var(--accent)",
+                padding: "4px 10px", borderRadius: 4, fontSize: 11, fontFamily: "var(--fontMono)", cursor: "pointer"
+              }}>💡 Get Hint (-50% pts)</button>
+            )}
           </div>
-        )}
 
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
-          {picked !== null && i < QUIZ.length - 1 && (
-            <Btn primary icon="arrow" onClick={() => { setI(i + 1); setPicked(null); }}>Next question</Btn>
-          )}
-          {picked !== null && i === QUIZ.length - 1 && (
-            <Btn primary icon="refresh" onClick={() => { setI(0); setPicked(null); setScore(0); }}>Restart · {score}/{QUIZ.length}</Btn>
+          <div style={{ display: "grid", gridTemplateColumns: q.type === "pick_patch" ? "1fr" : "repeat(2, 1fr)", gap: 10 }}>
+            {q.answers.map((a, idx) => {
+              const isHidden = hiddenAnswersRef.current.includes(idx);
+              if (isHidden && picked === null) {
+                return (
+                  <div key={idx} style={{ padding: "12px 14px", background: "var(--panelAlt)", border: "1px dashed var(--border)", borderRadius: 5, color: "var(--textMute)", opacity: 0.5, textAlign: "center", fontSize: 12, fontFamily: "var(--fontMono)" }}>
+                    Eliminated
+                  </div>
+                );
+              }
+
+              const isPicked = picked === idx;
+              const isCorrect = idx === q.correct;
+              const showResult = picked !== null && (isPicked || isCorrect);
+              
+              const bg = (!showResult) ? "var(--panelAlt)"
+                       : isCorrect ? "color-mix(in oklab, var(--ok) 18%, var(--panelAlt))"
+                       : "color-mix(in oklab, var(--danger) 18%, var(--panelAlt))";
+                       
+              const border = (!showResult) ? "var(--border)"
+                           : isCorrect ? "var(--ok)"
+                           : "var(--danger)";
+              
+              return (
+                <button key={idx} onClick={() => pick(idx)} disabled={picked !== null} style={{
+                  padding: "12px 14px", textAlign: "left",
+                  background: bg, border: `1px solid ${border}`, borderRadius: 5,
+                  color: "var(--text)", cursor: picked === null ? "pointer" : "default",
+                  transition: "all 120ms",
+                }}>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <span style={{ color: showResult && isCorrect ? "var(--ok)" : showResult && isPicked ? "var(--danger)" : "var(--textMute)", fontFamily: "var(--fontMono)", fontSize: 13, marginTop: q.type === "pick_patch" ? 10 : 0 }}>
+                      {showResult && isCorrect ? "✓" : showResult && isPicked ? "✗" : String.fromCharCode(65 + idx)}
+                    </span>
+                    <div style={{ flex: 1, width: "100%" }}>
+                      {q.type === "pick_patch" ? (
+                        <div style={{ fontFamily: "var(--fontMono)", fontSize: 12, background: "var(--bg)", padding: 10, borderRadius: 4, whiteSpace: "pre-wrap", overflowX: "auto", border: "1px solid var(--border)" }}>{a}</div>
+                      ) : q.type === "identify_exploit" ? (
+                        <div style={{ fontFamily: "var(--fontMono)", fontSize: 13 }}>{a}</div>
+                      ) : (
+                        <div style={{ fontSize: 13.5 }}>{a}</div>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {picked !== null && (
+            <div style={{ marginTop: 16, padding: 16, background: "var(--panelAlt)", border: "1px solid var(--border)", borderLeft: `3px solid ${picked === q.correct ? "var(--ok)" : "var(--danger)"}`, borderRadius: 4, animation: "gl-fade 300ms" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                <div style={{ fontFamily: "var(--fontMono)", fontSize: 11, color: picked === q.correct ? "var(--ok)" : "var(--danger)", textTransform: "uppercase", letterSpacing: 1 }}>
+                  {picked === -1 ? "Timeout!" : picked === q.correct ? "Correct!" : "Incorrect"}
+                </div>
+                {picked === q.correct && (
+                  <div style={{ fontFamily: "var(--fontMono)", fontSize: 11, color: "var(--accent)" }}>
+                    +{hintUsed ? 50 : 100 + (streak * 20) + (timeLeft * 2)} pts
+                  </div>
+                )}
+              </div>
+              <div style={{ fontSize: 13.5, lineHeight: 1.6, color: "var(--textDim)" }}>
+                {q.explain}
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+                {qIndex < 9 ? (
+                  <Btn primary icon="arrow" onClick={nextQ}>Next question</Btn>
+                ) : (
+                  <Btn primary icon="check" onClick={() => setSetupStep("module")}>Finish Module</Btn>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </Panel>

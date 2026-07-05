@@ -40,6 +40,17 @@ async def _run(source: Path) -> int:
     logger = get_agent_logger(run_dir, "cli")
     logger.info("pipeline.start", source=str(source), run_dir=str(run_dir))
 
+    from guardianloop.preflight import validate_config
+    preflight = await validate_config(cfg)
+    for warning in preflight.warnings:
+        logger.warning("preflight.warning", msg=warning)
+        print(f"WARNING: {warning}")
+    if not preflight.is_valid:
+        for err in preflight.errors:
+            logger.error("preflight.error", msg=err)
+            print(f"ERROR: {err}")
+        return 1
+
     try:
         source_path = ingest_local(source)
     except Exception as e:

@@ -231,28 +231,58 @@ async def classifier_node(state: PipelineState, config: RunnableConfig) -> dict:
         has_key=bool(gl.nvd_api_key),
     )
 
+    # CWE-level cache: avoid redundant NVD calls for the same CWE
+    _cwe_cache: dict[str, list[dict]] = {}
+    # Semaphore for NVD rate limiting — allow at most 1 concurrent call with
+    # sleep_secs between calls to respect the NVD rate limit.
+    _rate_lock = asyncio.Lock()
+    _call_count = {"n": 0}
+
+    async def _fetch_with_cache(cwe_id: str) -> list[dict]:
+        """Fetch NVD data for a CWE, using cache to skip redundant calls."""
+        if cwe_id in _cwe_cache:
+            logger.info("classifier.cache_hit", cwe_id=cwe_id)
+            return _cwe_cache[cwe_id]
+
+        # Rate-limit: serialize NVD calls and sleep between them
+        async with _rate_lock:
+            # Re-check cache after acquiring lock (another task may have populated it)
+            if cwe_id in _cwe_cache:
+                return _cwe_cache[cwe_id]
+            if _call_count["n"] > 0:
+                logger.info("classifier.nvd_sleep", seconds=sleep_secs, cwe_id=cwe_id)
+                await asyncio.sleep(sleep_secs)
+            _call_count["n"] += 1
+            vulns = await client.fetch_cves_for_cwe(cwe_id, logger)
+            _cwe_cache[cwe_id] = vulns
+            return vulns
+
     async def _enrich_one(f: Finding) -> EnrichedFinding:
         if not f.cwe_id:
             return EnrichedFinding(finding=f, enrichment_source="none")
-        vulns = await client.fetch_cves_for_cwe(f.cwe_id, logger)
+        vulns = await _fetch_with_cache(f.cwe_id)
         if not vulns:
             return _fallback_enrichment(f)
         return _enrich_from_nvd(f, vulns)
 
-    enriched: list[EnrichedFinding] = []
-    for i, f in enumerate(state.findings):
-        if i > 0:
-            # Rate-limit: sleep between successive NVD calls.
-            logger.info("classifier.nvd_sleep", seconds=sleep_secs, finding_index=i)
-            await asyncio.sleep(sleep_secs)
-        ef = await _enrich_one(f)
-        enriched.append(ef)
+    # Run all enrichment tasks concurrently — rate limiting is handled by
+    # the lock inside _fetch_with_cache, not by sequential sleeping.
+    tasks = [_enrich_one(f) for f in state.findings]
+    enriched: list[EnrichedFinding] = await asyncio.gather(*tasks)
+
+    for ef in enriched:
         logger.info(
             "classifier.enriched",
-            finding_id=f.id,
+            finding_id=ef.finding.id,
             source=ef.enrichment_source,
             score=ef.cvss_score,
         )
 
-    logger.info("classifier.done", enriched=len(enriched))
+    logger.info(
+        "classifier.done",
+        enriched=len(enriched),
+        nvd_calls=_call_count["n"],
+        cache_hits=len(state.findings) - _call_count["n"],
+    )
     return {"enriched_findings": enriched, "status": "fixing"}
+

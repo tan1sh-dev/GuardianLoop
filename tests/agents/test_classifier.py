@@ -245,10 +245,10 @@ async def test_classifier_falls_back_on_403(
 
 
 @pytest.mark.asyncio
-async def test_classifier_sleeps_between_multiple_findings(
+async def test_classifier_cwe_cache_deduplicates_nvd_calls(
     monkeypatch, tmp_run_dir, runnable_config
 ):
-    """With N findings, asyncio.sleep is called exactly N-1 times."""
+    """With N findings sharing the same CWE, only 1 NVD call is made (rest are cache hits)."""
     sleep_calls: list[float] = []
 
     class _FakeResp:
@@ -286,7 +286,7 @@ async def test_classifier_sleeps_between_multiple_findings(
             line_start=i,
             line_end=i,
         )
-        for i in range(1, 4)  # 3 findings
+        for i in range(1, 4)  # 3 findings, all same CWE
     ]
     state = PipelineState(
         source_file="x.cpp",
@@ -295,11 +295,72 @@ async def test_classifier_sleeps_between_multiple_findings(
     )
     update = await classifier_node(state, runnable_config)
 
-    # 3 findings → 2 inter-call sleeps (not before the first call).
-    # The 403 retry back-offs also call asyncio.sleep; filter by checking that
-    # at least 2 of the sleep calls are the rate-limit sleep (7.0 s, no API key).
+    # All 3 findings share CWE-121 → only 1 NVD call, 2 cache hits.
+    # There should be NO rate-limit sleeps (7.0 s) since only 1 NVD call is made.
+    rate_limit_sleeps = [s for s in sleep_calls if s == 7.0]
+    assert len(rate_limit_sleeps) == 0, (
+        f"Expected 0 rate-limit sleeps (CWE cache should dedup), got sleep_calls={sleep_calls}"
+    )
+    assert len(update["enriched_findings"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_classifier_rate_limits_distinct_cwes(
+    monkeypatch, tmp_run_dir, runnable_config
+):
+    """With N findings having distinct CWEs, rate-limit sleeps occur between NVD calls."""
+    sleep_calls: list[float] = []
+
+    class _FakeResp:
+        status_code = 403
+
+        def json(self):
+            return {}
+
+    class _FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def get(self, *a, **k):
+            return _FakeResp()
+
+    monkeypatch.setattr("httpx.AsyncClient", lambda *a, **k: _FakeClient())
+
+    async def _capture_sleep(secs, *a, **k):
+        sleep_calls.append(secs)
+
+    monkeypatch.setattr(asyncio, "sleep", _capture_sleep)
+
+    # 3 findings with 3 different CWEs → 3 NVD calls → 2 rate-limit sleeps
+    cwes = ["CWE-121", "CWE-78", "CWE-89"]
+    findings = [
+        Finding(
+            id=f"fid{i}",
+            tool="semgrep",
+            rule_id="r",
+            cwe_id=cwes[i - 1],
+            message="m",
+            severity="HIGH",
+            file_path="x.cpp",
+            line_start=i,
+            line_end=i,
+        )
+        for i in range(1, 4)
+    ]
+    state = PipelineState(
+        source_file="x.cpp",
+        run_dir=tmp_run_dir,
+        findings=findings,
+    )
+    update = await classifier_node(state, runnable_config)
+
+    # 3 distinct CWEs → 3 NVD calls → 2 inter-call rate-limit sleeps (7.0 s each, no API key)
     rate_limit_sleeps = [s for s in sleep_calls if s == 7.0]
     assert len(rate_limit_sleeps) == 2, (
         f"Expected 2 rate-limit sleeps (7.0 s each), got sleep_calls={sleep_calls}"
     )
     assert len(update["enriched_findings"]) == 3
+

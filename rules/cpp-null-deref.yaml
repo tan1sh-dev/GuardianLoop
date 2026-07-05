@@ -1,0 +1,73 @@
+rules:
+
+  # CWE-476: fopen() result used without NULL check
+  - id: cpp-cwe476-fopen-no-check
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      fopen() returns NULL when the file cannot be opened. Passing the result
+      directly to fread, fprintf, fwrite, or fclose without a NULL check is
+      undefined behaviour and will crash (CWE-476). Always check:
+      if (fp == NULL) { perror("fopen"); return; }
+    metadata:
+      cwe: CWE-476
+      owasp: A03:2021
+    pattern-either:
+      - pattern: |
+          $FP = fopen(...);
+          ...
+          fread(..., $FP);
+      - pattern: |
+          $FP = fopen(...);
+          ...
+          fwrite(..., $FP);
+      - pattern: |
+          $FP = fopen(...);
+          ...
+          fprintf($FP, ...);
+      - pattern: |
+          $FP = fopen(...);
+          ...
+          fgets(..., $FP);
+
+  # CWE-476: malloc() result dereferenced via * without NULL check
+  - id: cpp-cwe476-malloc-deref-star
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      malloc() returns NULL on allocation failure. Dereferencing the result
+      via the * operator without a NULL check is undefined behaviour (CWE-476).
+      Always validate: if (ptr == NULL) { /* handle error */ }
+    metadata:
+      cwe: CWE-476
+      owasp: A03:2021
+    pattern-either:
+      - pattern: |
+          $PTR = ($TYPE *)malloc(...);
+          ...
+          *$PTR = $VAL;
+      - pattern: |
+          $PTR = malloc(...);
+          ...
+          *$PTR = $VAL;
+
+  # CWE-476: new(std::nothrow) returns nullptr, must check before use
+  - id: cpp-cwe476-new-nothrow-no-check
+    languages: [cpp]
+    severity: ERROR
+    message: >
+      new(std::nothrow) returns nullptr on allocation failure instead of
+      throwing std::bad_alloc. The result must be checked for nullptr before
+      any dereference (CWE-476). Use: if (ptr == nullptr) { /* handle */ }
+    metadata:
+      cwe: CWE-476
+      owasp: A03:2021
+    pattern-either:
+      - pattern: |
+          $PTR = new(std::nothrow) $TYPE(...);
+          ...
+          $PTR->$FIELD;
+      - pattern: |
+          $PTR = new(std::nothrow) $TYPE;
+          ...
+          $PTR->$FIELD;

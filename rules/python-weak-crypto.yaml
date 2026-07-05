@@ -1,0 +1,47 @@
+rules:
+
+  # CWE-327: hashlib.md5 — broken hash used for security
+  - id: python-cwe327-md5
+    languages: [python]
+    severity: WARNING
+    message: >
+      hashlib.md5() is cryptographically broken: collision attacks are
+      practical and preimage resistance is weakened (CWE-327). Do not use
+      MD5 for password hashing, data integrity, or digital signatures.
+      Use hashlib.sha256() for integrity, or bcrypt/argon2 for passwords.
+    metadata:
+      cwe: CWE-327
+      owasp: A02:2021
+    pattern-either:
+      - pattern: hashlib.md5(...)
+      - pattern: hashlib.new("md5", ...)
+
+  # CWE-327: hashlib.sha1 — deprecated, collision attacks known
+  - id: python-cwe327-sha1
+    languages: [python]
+    severity: WARNING
+    message: >
+      hashlib.sha1() is deprecated for security use: practical collision
+      attacks have been demonstrated (CWE-327). Use hashlib.sha256() or
+      hashlib.sha3_256() for integrity and digital signatures.
+    metadata:
+      cwe: CWE-327
+      owasp: A02:2021
+    pattern-either:
+      - pattern: hashlib.sha1(...)
+      - pattern: hashlib.new("sha1", ...)
+
+  # CWE-327: DES cipher import from PyCryptodome / PyCrypto
+  - id: python-cwe327-des-import
+    languages: [python]
+    severity: ERROR
+    message: >
+      DES encryption imported from Crypto.Cipher. DES uses a 56-bit key and
+      is trivially brute-forced (CWE-327). Use AES instead:
+      from Crypto.Cipher import AES.
+    metadata:
+      cwe: CWE-327
+      owasp: A02:2021
+    pattern-either:
+      - pattern: from Crypto.Cipher import DES
+      - pattern: from Cryptodome.Cipher import DES

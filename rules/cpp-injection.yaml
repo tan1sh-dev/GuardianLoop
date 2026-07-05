@@ -13,8 +13,11 @@ rules:
       cwe: CWE-78
       owasp: A03:2021
     patterns:
-      - pattern: system($CMD)
+      - pattern-either:
+          - pattern: system($CMD)
+          - pattern: std::system($CMD)
       - pattern-not: system("...")
+      - pattern-not: std::system("...")
 
   # CWE-78: popen() with non-literal command string
   - id: cpp-cwe78-popen

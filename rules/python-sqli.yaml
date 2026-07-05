@@ -1,0 +1,49 @@
+rules:
+
+  # CWE-89: SQL injection via f-string in execute()
+  - id: python-cwe89-execute-fstring
+    languages: [python]
+    severity: ERROR
+    message: >
+      SQL query built with an f-string or string concatenation is passed to
+      cursor.execute(). An attacker who controls part of the interpolated
+      value can inject arbitrary SQL (CWE-89). Use parameterized queries:
+      cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    metadata:
+      cwe: CWE-89
+      owasp: A03:2021
+    pattern-either:
+      - patterns:
+          - pattern: $CURSOR.execute($QUERY, ...)
+          - pattern-not: $CURSOR.execute("...", ...)
+      - patterns:
+          - pattern: $CURSOR.execute($QUERY)
+          - pattern-not: $CURSOR.execute("...")
+
+  # CWE-89: SQL injection via string formatting with % operator
+  - id: python-cwe89-execute-percent
+    languages: [python]
+    severity: ERROR
+    message: >
+      SQL query built with the %-formatting operator and passed to execute().
+      This allows SQL injection if the substituted values come from user input
+      (CWE-89). Use parameterized queries with ? or %s placeholders instead.
+    metadata:
+      cwe: CWE-89
+      owasp: A03:2021
+    patterns:
+      - pattern: $CURSOR.execute("..." % $ARGS, ...)
+
+  # CWE-89: SQL injection via .format()
+  - id: python-cwe89-execute-format
+    languages: [python]
+    severity: ERROR
+    message: >
+      SQL query built with .format() and passed to execute(). This allows SQL
+      injection if the formatted values come from user input (CWE-89). Use
+      parameterized queries instead.
+    metadata:
+      cwe: CWE-89
+      owasp: A03:2021
+    patterns:
+      - pattern: $CURSOR.execute("...".format(...), ...)

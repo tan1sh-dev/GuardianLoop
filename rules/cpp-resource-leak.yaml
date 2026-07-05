@@ -1,0 +1,68 @@
+rules:
+
+  # CWE-775: fopen() result not fclose()d before return
+  - id: cpp-cwe775-fopen-no-fclose
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      A file opened with fopen() is not closed with fclose() before the
+      function returns. This leaks file descriptors, and repeated calls will
+      eventually hit the OS limit and cause a denial of service (CWE-775).
+      Use RAII wrappers (std::fstream, std::unique_ptr with a custom deleter)
+      or ensure every exit path calls fclose().
+    metadata:
+      cwe: CWE-775
+      owasp: A05:2021
+    patterns:
+      - pattern: |
+          $FP = fopen(...);
+          ...
+          return ...;
+      - pattern-not-inside: |
+          ...
+          fclose($FP);
+          ...
+
+  # CWE-775: socket() fd not close()d before return
+  - id: cpp-cwe775-socket-no-close
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      A socket created with socket() is not closed before the function returns.
+      Leaked sockets exhaust the process's file descriptor limit and can lead
+      to denial of service (CWE-775). Close with close(fd) on POSIX or
+      closesocket(fd) on Windows, or use RAII wrappers.
+    metadata:
+      cwe: CWE-775
+      owasp: A05:2021
+    patterns:
+      - pattern: |
+          $FD = socket(...);
+          ...
+          return ...;
+      - pattern-not-inside: |
+          ...
+          close($FD);
+          ...
+
+  # CWE-775: open() fd not close()d before return
+  - id: cpp-cwe775-open-no-close
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      A file descriptor obtained via open() is not closed before the function
+      returns. This leaks file descriptors across repeated calls and may
+      exhaust the per-process limit (CWE-775). Call close(fd) on every exit
+      path, or use RAII wrappers.
+    metadata:
+      cwe: CWE-775
+      owasp: A05:2021
+    patterns:
+      - pattern: |
+          $FD = open(...);
+          ...
+          return ...;
+      - pattern-not-inside: |
+          ...
+          close($FD);
+          ...

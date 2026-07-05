@@ -28,6 +28,19 @@ PipelineStatus = Literal[
 ]
 
 
+class RelatedFinding(BaseModel):
+    """Lightweight metadata for a finding that was deduplicated into a representative."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    rule_id: str
+    line_start: int
+    line_end: int
+    snippet: str = ""
+    message: str = ""
+
+
 class Finding(BaseModel):
     """Raw SAST output from Scout."""
 
@@ -44,6 +57,11 @@ class Finding(BaseModel):
     line_end: int
     snippet: str = ""
     language: Language = "unknown"
+    function_name: str | None = Field(default=None, description="Enclosing function, if detected")
+    related_findings: list[RelatedFinding] = Field(
+        default_factory=list,
+        description="Sibling findings merged during deduplication",
+    )
 
 
 class EnrichedFinding(BaseModel):
@@ -104,7 +122,9 @@ class PipelineState(BaseModel):
     findings: list[Finding] = Field(default_factory=list)
     enriched_findings: list[EnrichedFinding] = Field(default_factory=list)
     patches: list[Patch] = Field(default_factory=list)
+    skipped_findings: list[dict] = Field(default_factory=list)
     verification_results: list[VerificationResult] = Field(default_factory=list)
     loop_count: int = 0
     status: PipelineStatus = "pending"
     error: str | None = None
+    raw_findings_count: int = Field(default=0, description="Total Semgrep findings before deduplication")

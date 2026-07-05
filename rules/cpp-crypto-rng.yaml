@@ -88,3 +88,40 @@ rules:
       - pattern: strcmp($INPUT, "secret")
       - pattern: strcmp($INPUT, "1234")
       - pattern: strncmp($INPUT, "password", ...)
+
+  # CWE-327: DES — 56-bit key, trivially brute-forced
+  - id: cpp-cwe327-des
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      DES uses a 56-bit key and is trivially brute-forced in hours. It is
+      categorically broken for all security applications (CWE-327). Migrate to
+      AES-256 (EVP_aes_256_gcm or equivalent).
+    metadata:
+      cwe: CWE-327
+      owasp: A02:2021
+    pattern-either:
+      - pattern: DES_ecb_encrypt(...)
+      - pattern: DES_cbc_encrypt(...)
+      - pattern: DES_set_key(...)
+      - pattern: DES_set_key_checked(...)
+      - pattern: EVP_des_ecb()
+      - pattern: EVP_des_cbc()
+      - pattern: EVP_des_ede3_cbc()
+
+  # CWE-327: RC4 — biased keystream, practical plaintext recovery attacks
+  - id: cpp-cwe327-rc4
+    languages: [c, cpp]
+    severity: ERROR
+    message: >
+      RC4 has known keystream biases that enable practical plaintext recovery
+      attacks (e.g. NOMORE, Bar-Mitzvah). It is deprecated by IETF RFC 7465
+      (CWE-327). Use AES-GCM or ChaCha20-Poly1305 instead.
+    metadata:
+      cwe: CWE-327
+      owasp: A02:2021
+    pattern-either:
+      - pattern: RC4(...)
+      - pattern: RC4_set_key(...)
+      - pattern: EVP_rc4()
+

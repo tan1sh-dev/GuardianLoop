@@ -1,0 +1,42 @@
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: guardianloop/web:latest
+    container_name: guardianloop-web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount the runs directory to persist data locally
+      - ./runs:/app/runs
+      # Mount custom Semgrep rules so users can add/edit rules on the fly
+      - ./rules:/app/rules
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # These sandbox services are not meant to run continuously as long-lived containers
+  # in this compose stack. We define them here so `docker compose build` automatically 
+  # builds their images, allowing the main web app to spawn them dynamically.
+  python-sandbox:
+    build:
+      context: .
+      dockerfile: docker/python-sandbox.Dockerfile
+    image: guardianloop/python-sandbox:latest
+    profiles: ["donotstart"]
+
+  cpp-sandbox:
+    build:
+      context: .
+      dockerfile: docker/cpp-sandbox.Dockerfile
+    image: guardianloop/cpp-sandbox:latest
+    profiles: ["donotstart"]

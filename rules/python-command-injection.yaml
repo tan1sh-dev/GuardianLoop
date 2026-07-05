@@ -13,3 +13,33 @@ rules:
           - pattern: os.popen(...)
       - pattern-not: os.system("...")
       - pattern-not: os.popen("...")
+
+  # CWE-78: subprocess with shell=True and non-literal command
+  - id: python-cwe78-subprocess-shell
+    languages: [python]
+    severity: ERROR
+    message: >
+      subprocess called with shell=True and a non-literal command string.
+      An attacker can inject shell metacharacters (;, &&, |, $()) to execute
+      arbitrary OS commands (CWE-78). Use shell=False and pass arguments as
+      a list: subprocess.run(['cmd', 'arg1', user_input], shell=False).
+    metadata:
+      cwe: CWE-78
+      owasp: A03:2021
+    pattern-either:
+      - patterns:
+          - pattern: subprocess.call($CMD, ..., shell=True, ...)
+          - pattern-not: subprocess.call("...", ..., shell=True, ...)
+      - patterns:
+          - pattern: subprocess.run($CMD, ..., shell=True, ...)
+          - pattern-not: subprocess.run("...", ..., shell=True, ...)
+      - patterns:
+          - pattern: subprocess.Popen($CMD, ..., shell=True, ...)
+          - pattern-not: subprocess.Popen("...", ..., shell=True, ...)
+      - patterns:
+          - pattern: subprocess.check_output($CMD, ..., shell=True, ...)
+          - pattern-not: subprocess.check_output("...", ..., shell=True, ...)
+      - patterns:
+          - pattern: subprocess.check_call($CMD, ..., shell=True, ...)
+          - pattern-not: subprocess.check_call("...", ..., shell=True, ...)
+

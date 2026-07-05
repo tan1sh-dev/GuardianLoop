@@ -112,16 +112,17 @@
   <!-- React + ReactDOM 18 (UMD) + Babel standalone for in-browser JSX. -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
 
   <!-- Design files load in dependency order; each one attaches its public
        symbols to window via Object.assign so the next can reference them. -->
-  <script type="text/babel" data-presets="react" src="data.jsx?v=13"></script>
-  <script type="text/babel" data-presets="react" src="ui-kit.jsx?v=13"></script>
-  <script type="text/babel" data-presets="react" src="live-scan.jsx?v=13"></script>
-  <script type="text/babel" data-presets="react" src="screens.jsx?v=13"></script>
-  <script type="text/babel" data-presets="react" src="learning.jsx?v=13"></script>
-  <script type="text/babel" data-presets="react" src="app.jsx?v=13"></script>
+  <script type="text/babel" data-presets="react" src="data.jsx?v=15"></script>
+  <script type="text/babel" data-presets="react" src="quizData.jsx?v=15"></script>
+  <script type="text/babel" data-presets="react" src="ui-kit.jsx?v=15"></script>
+  <script type="text/babel" data-presets="react" src="live-scan.jsx?v=15"></script>
+  <script type="text/babel" data-presets="react" src="screens.jsx?v=15"></script>
+  <script type="text/babel" data-presets="react" src="learning.jsx?v=15"></script>
+  <script type="text/babel" data-presets="react" src="app.jsx?v=15"></script>
 
   <!-- Hydrate from /api/runs (or fall back to mock data) and render the App. -->
   <script type="text/babel" data-presets="react" src="bootstrap.jsx"></script>

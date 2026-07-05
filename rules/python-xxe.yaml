@@ -1,0 +1,62 @@
+rules:
+
+  # CWE-611: xml.etree.ElementTree.parse — XXE possible
+  - id: python-cwe611-etree-parse
+    languages: [python]
+    severity: WARNING
+    message: >
+      xml.etree.ElementTree.parse() does not disable external entity resolution
+      by default. An attacker who controls the XML input can read local files
+      or probe internal network services via XXE (CWE-611). Use the
+      defusedxml library: defusedxml.ElementTree.parse().
+    metadata:
+      cwe: CWE-611
+      owasp: A05:2021
+    pattern-either:
+      - pattern: xml.etree.ElementTree.parse(...)
+      - pattern: ET.parse(...)
+      - pattern: ElementTree.parse(...)
+
+  # CWE-611: xml.etree.ElementTree.fromstring — XXE possible
+  - id: python-cwe611-etree-fromstring
+    languages: [python]
+    severity: WARNING
+    message: >
+      xml.etree.ElementTree.fromstring() is vulnerable to XXE attacks
+      (CWE-611). Use defusedxml.ElementTree.fromstring() instead.
+    metadata:
+      cwe: CWE-611
+      owasp: A05:2021
+    pattern-either:
+      - pattern: xml.etree.ElementTree.fromstring(...)
+      - pattern: ET.fromstring(...)
+      - pattern: ElementTree.fromstring(...)
+
+  # CWE-611: xml.sax.parse — SAX parser XXE
+  - id: python-cwe611-sax-parse
+    languages: [python]
+    severity: WARNING
+    message: >
+      xml.sax.parse() does not disable external entities by default and is
+      vulnerable to XXE (CWE-611). Use defusedxml.sax.parse() instead.
+    metadata:
+      cwe: CWE-611
+      owasp: A05:2021
+    patterns:
+      - pattern: xml.sax.parse(...)
+
+  # CWE-611: lxml.etree.parse without secure settings
+  - id: python-cwe611-lxml-parse
+    languages: [python]
+    severity: WARNING
+    message: >
+      lxml.etree.parse() processes external entities by default (CWE-611).
+      Create a parser with resolve_entities=False:
+      parser = lxml.etree.XMLParser(resolve_entities=False)
+      and pass it: lxml.etree.parse(source, parser).
+    metadata:
+      cwe: CWE-611
+      owasp: A05:2021
+    pattern-either:
+      - pattern: lxml.etree.parse(...)
+      - pattern: etree.parse(...)

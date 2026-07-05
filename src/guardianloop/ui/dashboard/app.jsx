@@ -110,7 +110,23 @@ function App() {
         </div>
       </aside>
 
-      <main className="gl-main-content" key={route} style={{ flex: 1, padding: containerPad, maxWidth: "calc(100vw - " + sidebarW + "px)", overflowX: "hidden" }}>
+      <main className="gl-main-content" key={route} style={{ flex: 1, padding: containerPad, maxWidth: "calc(100vw - " + sidebarW + "px)", overflowX: "hidden", position: "relative" }}>
+        <div style={{ position: "absolute", top: tweaks.density === "compact" ? 20 : 32, right: tweaks.density === "compact" ? 30 : 44, zIndex: 100 }}>
+          <a href="/" style={{
+            display: "inline-flex", alignItems: "center", gap: 8,
+            padding: "8px 16px", borderRadius: 8,
+            background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)",
+            color: "var(--textDim)", fontSize: 13, fontWeight: 600,
+            textDecoration: "none", transition: "all 200ms ease"
+          }}
+          onMouseOver={e => { e.currentTarget.style.borderColor = "rgba(52,211,153,0.4)"; e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.background = "rgba(52,211,153,0.08)"; }}
+          onMouseOut={e => { e.currentTarget.style.borderColor = "var(--border)"; e.currentTarget.style.color = "var(--textDim)"; e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+          >
+            <Icon name="home" size={14} />
+            Home
+          </a>
+        </div>
+
         {route === "overview"  && <OverviewScreen onNav={nav} />}
         {route === "live"      && <LiveScanScreen tweaks={tweaks} runId={routeArg} onNav={nav} onComplete={(run) => nav("detail", run)} />}
         {route === "new"       && <NewScanScreen onStart={(runId) => nav("live", runId)} />}

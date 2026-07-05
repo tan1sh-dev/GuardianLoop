@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#06070b" />
   <title>GuardianLoop · Autonomous Security Pipeline</title>
   <meta name="description" content="GuardianLoop is a four-agent autonomous security pipeline that finds, classifies, patches, and red-team verifies vulnerabilities in your code — fully automated." />
 
@@ -163,8 +164,13 @@
       box-shadow: 0 0 40px rgba(52,211,153,0.4), 0 4px 16px rgba(0,0,0,0.4);
       transition: box-shadow 200ms, transform 150ms;
       border: none; cursor: pointer; position: relative; overflow: hidden;
+      animation: primary-pulse 3s infinite alternate;
     }
-    .btn-primary:hover { box-shadow: 0 0 56px rgba(52,211,153,0.6), 0 4px 20px rgba(0,0,0,0.5); transform: translateY(-2px); }
+    @keyframes primary-pulse {
+      0% { box-shadow: 0 0 30px rgba(52,211,153,0.3), 0 4px 16px rgba(0,0,0,0.4); }
+      100% { box-shadow: 0 0 50px rgba(52,211,153,0.5), 0 4px 16px rgba(0,0,0,0.4); }
+    }
+    .btn-primary:hover { box-shadow: 0 0 64px rgba(52,211,153,0.7), 0 4px 20px rgba(0,0,0,0.5); transform: translateY(-2px); animation: none; }
     .btn-secondary {
       display: inline-flex; align-items: center; gap: 8px;
       padding: 14px 28px; border-radius: 10px; font-size: 15px; font-weight: 500;
@@ -206,7 +212,12 @@
       border: 1px solid var(--border);
       display: flex; align-items: center; justify-content: center;
       font-size: 22px;
-      transition: border-color 300ms, box-shadow 300ms;
+      transition: border-color 300ms, box-shadow 300ms, transform 300ms;
+    }
+    .pipeline-node:hover .node-icon {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(52,211,153,0.2);
+      border-color: rgba(52,211,153,0.4);
     }
     .node-icon.active {
       border-color: var(--accent);
@@ -497,7 +508,6 @@
         <a href="#features" class="nav-link">Features</a>
         <a href="#agents" class="nav-link">Agents</a>
         <a href="#different" class="nav-link">Why Us</a>
-        <a href="#setup" class="nav-link">Setup</a>
         <a href="/dashboard/" class="nav-cta">Try the Tool →</a>
       </div>
     </div>
@@ -522,10 +532,6 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           Launch Security Console
         </a>
-        <a href="#setup" class="btn-secondary">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          Setup guide
-        </a>
       </div>
 
       <!-- Pipeline visualization -->
@@ -533,27 +539,27 @@
         <div class="pipeline-label">Pipeline · GuardianLoop · 5 agents</div>
         <div class="pipeline-nodes">
           <div class="pipeline-node">
-            <div class="node-icon">🔍</div>
+            <div class="node-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent2)"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
             <div class="node-name">Scout</div>
             <div class="node-sub">Semgrep + Bandit</div>
           </div>
           <div class="pipeline-node">
-            <div class="node-icon">🏷️</div>
+            <div class="node-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--warn)"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></div>
             <div class="node-name">Classifier</div>
             <div class="node-sub">NVD · CVE/CVSS</div>
           </div>
           <div class="pipeline-node">
-            <div class="node-icon">⚡</div>
+            <div class="node-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
             <div class="node-name">Fixer</div>
             <div class="node-sub">Gemini 2.5 Pro · CoT</div>
           </div>
           <div class="pipeline-node">
-            <div class="node-icon">🧪</div>
+            <div class="node-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--danger)"><path d="M10 2v7.31"/><path d="M14 9.3V1.99"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/><path d="M5.52 16h12.96"/></svg></div>
             <div class="node-name">Red-Team</div>
             <div class="node-sub">Docker sandbox</div>
           </div>
           <div class="pipeline-node">
-            <div class="node-icon">📋</div>
+            <div class="node-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent3)"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><path d="M9 14h6"/><path d="M9 18h6"/><path d="M9 10h6"/></svg></div>
             <div class="node-name">Report</div>
             <div class="node-sub">JSON + Markdown</div>
           </div>
@@ -584,32 +590,32 @@
       </div>
       <div class="feature-grid">
         <div class="feature-card reveal bento-large">
-          <div class="feature-icon">🎯</div>
+          <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
           <div class="feature-title">Multi-mode Ingress</div>
           <div class="feature-desc">Upload a file, paste code directly, point to a GitHub Pull Request URL, or use the built-in demo. GuardianLoop handles Python (.py) and C/C++ (.c, .cpp) source files up to 1 MB.</div>
         </div>
         <div class="feature-card reveal bento-wide">
-          <div class="feature-icon">🔬</div>
+          <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
           <div class="feature-title">SAST-powered Scanning</div>
           <div class="feature-desc">Scout runs both Semgrep (with custom + registry rules) and Bandit against your code. Findings are emitted as structured Finding objects for the pipeline to consume.</div>
         </div>
         <div class="feature-card reveal bento-wide">
-          <div class="feature-icon">📊</div>
+          <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
           <div class="feature-title">CVE & CVSS Classification</div>
           <div class="feature-desc">Each finding is enriched with real CVE identifiers and CVSS 3.1 scores pulled from the NVD API. You see exactly how severe each weakness is, with exploitability context.</div>
         </div>
         <div class="feature-card reveal bento-wide">
-          <div class="feature-icon">🤖</div>
+          <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8.01" y2="16"/><line x1="16" y1="16" x2="16.01" y2="16"/></svg></div>
           <div class="feature-title">AI-powered Patching</div>
           <div class="feature-desc">The Fixer agent uses Gemini 2.5 Pro with chain-of-thought prompting (k=5 reasoning steps). It produces a diff patch and a transparent audit trail of its reasoning chain.</div>
         </div>
         <div class="feature-card reveal bento-wide">
-          <div class="feature-icon">🛡️</div>
+          <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
           <div class="feature-title">Red-Team Sandbox Verification</div>
           <div class="feature-desc">Every patch is verified by running the original exploit against the patched code inside a hardened Docker container — network-isolated, read-only, memory-capped at 512 MB.</div>
         </div>
         <div class="feature-card reveal bento-large">
-          <div class="feature-icon">📡</div>
+          <div class="feature-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
           <div class="feature-title">Live Security Console</div>
           <div class="feature-desc">Watch scans run in real time via the dashboard. See the GuardianLoop pipeline progress agent-by-agent, stream structlog output live, and open the full report when complete.</div>
         </div>
@@ -719,68 +725,6 @@
 
   <hr class="divider" />
 
-  <!-- ════════════ SETUP INSTRUCTIONS ════════════ -->
-  <section id="setup" class="instructions-section" style="padding-top: 100px; padding-bottom: 120px;">
-    <div class="container" style="max-width: 1100px;">
-      
-      <!-- Top header -->
-      <div class="reveal" style="margin-bottom: 60px;">
-        <div style="font-family: var(--fontMono); font-size: 11px; letter-spacing: 2px; color: var(--text-mute); text-transform: uppercase; margin-bottom: 20px; display: flex; align-items: center; gap: 12px;">
-          <div style="width: 24px; height: 1px; background: var(--text-mute);"></div> GET STARTED
-        </div>
-        <h2 style="font-family: 'Playfair Display', serif; font-size: 56px; font-weight: 700; color: #fff; line-height: 1.1; margin-bottom: 24px; letter-spacing: -1px;">
-          Up <span style="font-style: italic; color: #34d399; font-weight: 400;">in four commands.</span>
-        </h2>
-        <p style="font-size: 18px; color: var(--text-dim); max-width: 650px; line-height: 1.6;">
-          Drop your GOOGLE_API_KEY into .env, build the two sandbox images, and run the end-to-end demo on a known-vulnerable sample.
-        </p>
-      </div>
-
-      <!-- Two column layout -->
-      <div class="reveal" style="display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 60px; align-items: center;">
-        
-        <!-- Left: Terminal -->
-        <div style="background: #0f1220; border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
-          <!-- Terminal Header -->
-          <div style="display: flex; align-items: center; gap: 8px; padding: 14px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2);">
-            <div style="width: 10px; height: 10px; border-radius: 50%; background: #333642;"></div>
-            <div style="width: 10px; height: 10px; border-radius: 50%; background: #333642;"></div>
-            <div style="width: 10px; height: 10px; border-radius: 50%; background: #333642;"></div>
-            <div style="margin-left: 10px; font-family: var(--fontMono); font-size: 12px; color: var(--text-mute);">~/GuardianLoop</div>
-          </div>
-          <!-- Terminal Body -->
-          <div style="padding: 24px 20px; font-family: var(--fontMono); font-size: 13px; line-height: 1.8; color: var(--text-dim);">
-            <div><span style="color: #34d399;">$</span> <span style="color: #fff;">make install</span> <span style="color: var(--text-mute);">pip install -e .[dev]</span> <span style="color: #34d399;">✓ 47 packages resolved</span></div>
-            
-            <div style="margin-top: 12px;"><span style="color: #34d399;">$</span> <span style="color: #fff;">cp .env.example .env</span> <span style="color: var(--text-mute);">add GOOGLE_API_KEY (and _2 / _3 for rotation)</span></div>
-            
-            <div style="margin-top: 12px;"><span style="color: #34d399;">$</span> <span style="color: #fff;">make docker-build</span> <span style="color: var(--text-mute);">building guardianloop/python-sandbox building guardianloop/cpp-sandbox</span> <span style="color: #34d399;">✓ images ready</span></div>
-            
-            <div style="margin-top: 12px;"><span style="color: #34d399;">$</span> <span style="color: #fff;">make demo</span> <span style="color: var(--text-mute);">scout → classifier → fixer → red_team → report</span> <span style="color: #34d399;">✓ 2 findings · 2 patches HELD · 0 exploitable</span></div>
-            <div style="margin-top: 4px; color: var(--text-mute);">runs/20260522T172343Z/report.md</div>
-          </div>
-        </div>
-
-        <!-- Right: Content -->
-        <div>
-          <h3 style="font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; color: #fff; margin-bottom: 16px; letter-spacing: -0.5px;">
-            Then read the report.
-          </h3>
-          <p style="font-size: 15px; color: var(--text-dim); line-height: 1.6; margin-bottom: 32px;">
-            Every run drops a full audit bundle into <code style="font-family: var(--fontMono); font-size: 13px; color: var(--text-mute);">runs/&lt;timestamp&gt;/</code> — per-stage JSON, per-agent structlog files, and a three-section <code style="font-family: var(--fontMono); font-size: 13px; color: var(--text-mute);">report.md</code> built for engineers learning the vulnerability, not just closing the ticket.
-          </p>
-          <div style="display: flex; gap: 16px; align-items: center;">
-            <a href="#agents" style="padding: 12px 24px; background: #fff; color: #000; border-radius: 30px; font-size: 14px; font-weight: 600; text-decoration: none; transition: transform 200ms; box-shadow: 0 0 20px rgba(255,255,255,0.2);">Read the architecture</a>
-            <a href="#agents" style="padding: 12px 24px; background: rgba(255,255,255,0.03); color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 30px; font-size: 14px; font-weight: 600; text-decoration: none; transition: background 200ms;">Browse the agents</a>
-          </div>
-        </div>
-
-      </div>
-
-    </div>
-  </section>
-
-  <hr class="divider" />
 
   <!-- ════════════ CTA ════════════ -->
   <section class="cta-section">

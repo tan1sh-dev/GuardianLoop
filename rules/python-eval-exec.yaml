@@ -1,0 +1,48 @@
+rules:
+
+  # CWE-95: eval() on non-literal string
+  - id: python-cwe95-eval
+    languages: [python]
+    severity: ERROR
+    message: >
+      eval() called with a non-literal argument. If the string contains
+      user input, an attacker can execute arbitrary Python code such as
+      __import__('os').system('rm -rf /') (CWE-95). Remove eval() entirely
+      and use ast.literal_eval() for safe parsing of data literals, or
+      restructure the logic to avoid dynamic code execution.
+    metadata:
+      cwe: CWE-95
+      owasp: A03:2021
+    patterns:
+      - pattern: eval(...)
+      - pattern-not: eval("...")
+
+  # CWE-95: exec() on non-literal string
+  - id: python-cwe95-exec
+    languages: [python]
+    severity: ERROR
+    message: >
+      exec() called with a non-literal argument. If the string contains
+      user input, an attacker can execute arbitrary Python code (CWE-95).
+      Remove exec() and restructure the logic to avoid dynamic code execution.
+    metadata:
+      cwe: CWE-95
+      owasp: A03:2021
+    patterns:
+      - pattern: exec(...)
+      - pattern-not: exec("...")
+
+  # CWE-95: compile() + exec/eval — indirect dynamic execution
+  - id: python-cwe95-compile
+    languages: [python]
+    severity: WARNING
+    message: >
+      compile() creates a code object from a string, which is then executed
+      via eval() or exec(). If the source string is user-controlled, this is
+      equivalent to direct eval/exec injection (CWE-95).
+    metadata:
+      cwe: CWE-95
+      owasp: A03:2021
+    patterns:
+      - pattern: compile(...)
+      - pattern-not: compile("...", ...)

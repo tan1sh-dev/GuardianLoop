@@ -26,6 +26,7 @@ from guardianloop.config import Config
 from guardianloop.logging_setup import get_agent_logger
 from guardianloop.reporting.json_report import write_json_artifacts
 from guardianloop.reporting.markdown_report import write_markdown_report
+from guardianloop.reporting.sarif_report import write_sarif_artifact
 from guardianloop.state import PipelineState
 
 
@@ -35,11 +36,13 @@ async def increment_loop_node(state: PipelineState) -> dict:
 
 
 async def report_node(state: PipelineState, config: RunnableConfig) -> dict:
-    """Terminal node. Writes run_summary.json, findings.json, patches.json, report.md."""
+    """Terminal node. Writes run_summary.json, findings.json, patches.json, report.md, report.sarif."""
+    state.status = "complete"  # Mutate state so artifacts capture the final status
     logger = get_agent_logger(state.run_dir, "report")
     logger.info("report.start", run_dir=str(state.run_dir))
     write_json_artifacts(state)
     write_markdown_report(state)
+    write_sarif_artifact(state)
     logger.info("report.done", run_dir=str(state.run_dir))
     return {"status": "complete"}
 

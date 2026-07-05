@@ -45,15 +45,20 @@ from guardianloop.state import EnrichedFinding, Patch, PipelineState, Verificati
 # Per-key, per-model attempts before rotating away. Transient errors (parse
 # failure, 5xx, timeout) burn attempts on the same key; quota errors rotate
 # immediately without consuming further attempts on the dead key.
-MAX_ATTEMPTS_PER_KEY = 2
+MAX_ATTEMPTS_PER_KEY = 5
 
 FIXER_SYSTEM = (
     "You are GuardianLoop's Fixer agent. Given a vulnerable source file and a "
     "vulnerability finding, produce a minimally-invasive patch that eliminates "
     "the vulnerability while preserving intended behavior. Think step by step.\n"
-    "CRITICAL GUIDELINE: When fixing path traversal (CWE-22), prefer validating paths "
-    "using os.path.abspath and os.path.commonpath rather than stripping slashes with "
-    "werkzeug.utils.secure_filename, as the latter breaks legitimate subdirectory access."
+    "CRITICAL GUIDELINES:\n"
+    "- Path Traversal (CWE-22): Use Python's modern `pathlib` library to resolve and validate paths instead of `os.path.commonpath` (which is case-insensitive on Windows and easily bypassed).\n"
+    "- Password Hashing: When fixing plaintext passwords or weak hashes, always use a dedicated modern library like `bcrypt` or `argon2`. NEVER use `hashlib` with static salts.\n"
+    "- Hardcoded Secrets (CWE-798): When moving secrets to environment variables, DO NOT fetch them and raise exceptions in the global scope of a module, as this breaks imports. Fetch them lazily inside the function that needs them.\n"
+    "- Open Redirect (CWE-601): Always strictly validate the redirect target URL. Ensure it is a relative path (e.g., starts with '/' but not '//') or explicitly validate the domain against a whitelist before redirecting.\n"
+    "- Integer Overflow (CWE-190): When patching C++ integer overflow on arithmetic addition/subtraction, use compiler builtins like `__builtin_add_overflow(a, b, &res)` or `__builtin_sub_overflow(a, b, &res)` instead of manual conditional checks.\n"
+    "- Insecure Randomness (CWE-330): Swap out `random` for Python's cryptographically secure `secrets` module when generating security tokens, passwords, or session IDs.\n"
+    "- Dead Code & Cleanups: When removing or replacing vulnerable code (e.g., hardcoded secrets or insecure imports like `pickle`), completely purge the dead code, unused imports, and left-behind keys. Do not just comment them out."
 )
 
 _INSTRUCTIONS = """
@@ -131,8 +136,7 @@ _RETRY_AFTER_RE = re.compile(
     re.IGNORECASE,
 )
 _QUOTA_HINT_RE = re.compile(
-    r"(?:daily|monthly|per[-_ ]day|free[-_ ]tier|quota[_ ]?exceeded|"
-    r"resource_exhausted|exceeded.+quota)",
+    r"(?:daily[_ ]quota|monthly[_ ]quota|per[-_ ]day|free[-_ ]tier|quota[_ ]?exceeded)",
     re.IGNORECASE,
 )
 
@@ -161,6 +165,11 @@ def _classify_error(err: Exception) -> tuple[bool, float]:
     if is_429 and (_QUOTA_HINT_RE.search(s) or retry_after > _QUOTA_THRESHOLD_SECONDS):
         return True, retry_after
     return False, retry_after
+
+
+def _is_503_overload(err: Exception) -> bool:
+    s = str(err).lower()
+    return "503" in s and ("high demand" in s or "unavailable" in s)
 
 
 # ---------------------------------------------------------------------------
@@ -393,14 +402,13 @@ async def _generate_with_rotation(
     """
     last_err: Exception | None = None
 
+    # Track if we need a global 503 retry
+    primary_failed_due_to_503 = False
     models_to_try = [(0, primary_model)]
-    if fallback_model and fallback_model != primary_model:
-        models_to_try.append((1, fallback_model))
 
     for stage, model in models_to_try:
-        # Reset rotator state for the second stage so we re-try keys that were
-        # marked exhausted on Pro — they may still have flash budget.
-        if stage == 1:
+        # Reset rotator state for subsequent stages
+        if stage > 0:
             rotator = KeyRotator(keys=list(rotator.keys))
 
         current = rotator.current()
@@ -417,6 +425,14 @@ async def _generate_with_rotation(
                 from_model=primary_model,
                 to_model=fallback_model,
             )
+        elif stage == 0.5:
+            logger.warning(
+                "fixer.global_503_cooldown",
+                finding_id=finding_id,
+                model=primary_model,
+                seconds=30.0,
+            )
+            await asyncio.sleep(30.0)
 
         tried_indices: set[int] = set()
         while current is not None:
@@ -452,6 +468,8 @@ async def _generate_with_rotation(
                     last_err = e
                     is_quota, retry_after = _classify_error(e)
 
+                    is_503 = _is_503_overload(e)
+
                     if is_quota:
                         logger.warning(
                             "fixer.key_exhausted",
@@ -465,27 +483,52 @@ async def _generate_with_rotation(
                         break  # break attempt loop, rotate keys
 
                     # Transient error: backoff with jitter and retry same key.
-                    backoff = min(2 ** attempt + random.uniform(0, 1), 30.0)
+                    backoff = min(2 ** attempt + random.uniform(0, 1), 60.0)
                     if retry_after and retry_after <= _QUOTA_THRESHOLD_SECONDS:
                         backoff = retry_after
-                    logger.warning(
-                        "fixer.attempt_failed",
-                        finding_id=finding_id,
-                        model=model,
-                        key=key_id,
-                        attempt=attempt,
-                        of=MAX_ATTEMPTS_PER_KEY,
-                        backoff_seconds=backoff if attempt < MAX_ATTEMPTS_PER_KEY else None,
-                        error=str(e)[:200],
-                    )
+                    elif is_503 and backoff < 15.0:
+                        backoff = 15.0 + random.uniform(0, 5.0)
+                    if attempt < MAX_ATTEMPTS_PER_KEY:
+                        logger.info(
+                            "fixer.attempt_retry",
+                            finding_id=finding_id,
+                            model=model,
+                            key=key_id,
+                            attempt=attempt,
+                            of=MAX_ATTEMPTS_PER_KEY,
+                            backoff_seconds=backoff,
+                            error=str(e)[:200],
+                        )
+                    else:
+                        logger.warning(
+                            "fixer.attempt_failed",
+                            finding_id=finding_id,
+                            model=model,
+                            key=key_id,
+                            attempt=attempt,
+                            of=MAX_ATTEMPTS_PER_KEY,
+                            error=str(e)[:200],
+                        )
                     if attempt < MAX_ATTEMPTS_PER_KEY:
                         await asyncio.sleep(backoff)
 
             # All attempts on this key failed (transient) OR key marked
             # exhausted (quota) — either way, rotate.
+            if last_err and _is_503_overload(last_err):
+                # 503 is a model-wide capacity issue; rotating keys won't help.
+                # Break the key loop to skip to the next stage (fallback model).
+                break
+
             current = rotator.rotate()
 
-        if stage == 0 and fallback_model != primary_model:
+        if stage == 0 and last_err and _is_503_overload(last_err):
+            primary_failed_due_to_503 = True
+
+        if stage == 0:
+            if fallback_model and fallback_model != primary_model:
+                models_to_try.append((1, fallback_model))
+
+        if stage in (0, 0.5) and fallback_model != primary_model:
             logger.warning(
                 "fixer.all_keys_exhausted",
                 finding_id=finding_id,
@@ -523,6 +566,13 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
     last_patch = _latest_by_finding(state.patches, "iteration")
     last_verif = _latest_by_finding(state.verification_results, "patch_iteration")
 
+    if gl.fixer_model == gl.fixer_fallback_model:
+        logger.warning(
+            "fixer.identical_fallback",
+            model=gl.fixer_model,
+            msg="fixer_model and fixer_fallback_model are identical. Fallback cascade will provide no benefit."
+        )
+
     logger.info(
         "fixer.start",
         iteration=state.loop_count,
@@ -553,7 +603,8 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
     # only one vulnerability against the original.
     running_source = source
 
-    for ef in state.enriched_findings:
+    _INTER_FINDING_DELAY = 5  # seconds between API calls to avoid rate-limit bursts
+    for _ef_idx, ef in enumerate(state.enriched_findings):
         f = ef.finding
         if state.loop_count > 0:
             prior_verif_check = last_verif.get(f.id)
@@ -565,6 +616,11 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
 
         prompt = _build_prompt(ef, running_source, prior, prior_verif)
         rotator = KeyRotator(keys=keys)
+        # Cooldown between successive API calls to stay within RPM limits
+        if _ef_idx > 0:
+            logger.info("fixer.rate_limit_cooldown", seconds=_INTER_FINDING_DELAY)
+            await asyncio.sleep(_INTER_FINDING_DELAY)
+
         logger.info("fixer.prompting", finding_id=f.id, iteration=state.loop_count)
 
         try:
@@ -585,6 +641,11 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
                 error=str(e)[:300],
                 keys_remaining=rotator.remaining,
             )
+            # Record the skipped finding
+            state.skipped_findings.append({
+                "finding_id": f.id,
+                "reason": f"Fixer gave up after exhausting keys: {str(e)[:200]}"
+            })
             continue
 
         # Accumulate usage
@@ -657,4 +718,4 @@ async def fixer_node(state: PipelineState, config: RunnableConfig) -> dict:
     except OSError:
         pass
 
-    return {"patches": new_patches, "status": "verifying"}
+    return {"patches": new_patches, "skipped_findings": state.skipped_findings, "status": "verifying"}

@@ -33,7 +33,7 @@ from langchain_core.runnables import RunnableConfig
 
 from guardianloop.config import Config
 from guardianloop.logging_setup import get_agent_logger
-from guardianloop.state import Finding, Language, PipelineState, Severity, Tool
+from guardianloop.state import Finding, Language, PipelineState, RelatedFinding, Severity, Tool
 
 _SEVERITY_MAP: dict[str, Severity] = {
     "ERROR": "HIGH",
@@ -122,7 +122,7 @@ def _semgrep_cmd(source: Path, token: str | None) -> list[str]:
         wsl_rules = _win_to_wsl_path(Path(_RULES_DIR))
         metrics_part = " ".join(metrics_flag)
         inner = (
-            f"export PATH=\"$HOME/.local/bin:$PATH\" && "
+            f"export PATH=\"$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\" && "
             f"{token_export}"
             f"semgrep scan "
             f"--config {registry_config} --config '{wsl_rules}' "
@@ -217,13 +217,16 @@ async def _run_semgrep(
         logger.warning("scout.semgrep_not_available", error=str(exc))
         return []
 
+    comm_task = asyncio.create_task(proc.communicate())
     try:
         stdout_b, stderr_b = await asyncio.wait_for(
-            proc.communicate(), timeout=timeout
+            comm_task, timeout=timeout
         )
     except asyncio.TimeoutError:
         proc.kill()
         await proc.wait()
+        if not comm_task.done():
+            comm_task.cancel()
         logger.warning("scout.semgrep_timeout", timeout=timeout)
         return []
 
@@ -250,6 +253,86 @@ async def _run_semgrep(
     return parsed
 
 
+_SEVERITY_RANK: dict[str, int] = {
+    "INFO": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4,
+}
+
+
+def _extract_function_name(file_path: Path, line_number: int) -> str | None:
+    """Best-effort extraction of the enclosing function name for a given line.
+
+    Scans backwards from ``line_number`` looking for C/C++ or Python function
+    definitions. Returns None if no enclosing function can be determined.
+    """
+    try:
+        lines = file_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return None
+
+    # Patterns for function definitions
+    # C/C++: <type> <name>(<args>) {
+    c_func_re = re.compile(r"^[\w\s\*:~]+?\b(\w+)\s*\([^)]*\)\s*(?:\{|$)")
+    # Python: def <name>(<args>):
+    py_func_re = re.compile(r"^\s*(?:async\s+)?def\s+(\w+)\s*\(")
+
+    for i in range(min(line_number - 1, len(lines) - 1), -1, -1):
+        line = lines[i]
+        m = py_func_re.match(line) or c_func_re.match(line)
+        if m:
+            return m.group(1)
+    return None
+
+
+def _deduplicate_findings(findings: list[Finding]) -> list[Finding]:
+    """Group findings by (file_path, cwe_id, function_name) and keep one representative per group.
+
+    The representative is the finding with the highest severity (ties broken by
+    earliest line number). All other findings in the group are stored as
+    ``related_findings`` on the representative so no information is lost.
+
+    Findings without a CWE ID are never deduplicated — they pass through as-is.
+    """
+    from collections import defaultdict
+
+    groups: dict[tuple[str, str, str | None], list[Finding]] = defaultdict(list)
+    ungrouped: list[Finding] = []
+
+    for f in findings:
+        if f.cwe_id:
+            key = (f.file_path, f.cwe_id, f.function_name)
+            groups[key].append(f)
+        else:
+            ungrouped.append(f)
+
+    deduped: list[Finding] = []
+    for _key, group in groups.items():
+        # Sort: highest severity first, then earliest line
+        group.sort(
+            key=lambda f: (-_SEVERITY_RANK.get(f.severity, 0), f.line_start),
+        )
+        representative = group[0]
+        siblings = [
+            RelatedFinding(
+                id=f.id,
+                rule_id=f.rule_id,
+                line_start=f.line_start,
+                line_end=f.line_end,
+                snippet=f.snippet,
+                message=f.message,
+            )
+            for f in group[1:]
+        ]
+        # Merge related_findings (in case the representative already had some)
+        merged = list(representative.related_findings) + siblings
+        representative = representative.model_copy(update={"related_findings": merged})
+        deduped.append(representative)
+
+    deduped.extend(ungrouped)
+    # Stable sort by line number so the pipeline processes them in source order
+    deduped.sort(key=lambda f: f.line_start)
+    return deduped
+
+
 async def scout_node(state: PipelineState, config: RunnableConfig) -> dict:
     gl: Config = config["configurable"]["gl_config"]
     logger = get_agent_logger(state.run_dir, "scout")
@@ -259,6 +342,27 @@ async def scout_node(state: PipelineState, config: RunnableConfig) -> dict:
     logger.info("scout.start", file=str(source), language=language)
 
     findings = await _run_semgrep(source, gl.scout_timeout_seconds, language, gl.semgrep_app_token, logger)
+    raw_count = len(findings)
 
-    logger.info("scout.done", findings=len(findings))
-    return {"findings": findings, "language": language, "status": "classifying"}
+    # Annotate each finding with its enclosing function name for deduplication
+    annotated: list[Finding] = []
+    for f in findings:
+        func = _extract_function_name(source, f.line_start)
+        if func:
+            f = f.model_copy(update={"function_name": func})
+        annotated.append(f)
+
+    deduped = _deduplicate_findings(annotated)
+
+    logger.info(
+        "scout.done",
+        raw_findings=raw_count,
+        deduplicated_findings=len(deduped),
+        reduced_by=raw_count - len(deduped),
+    )
+    return {
+        "findings": deduped,
+        "language": language,
+        "status": "classifying",
+        "raw_findings_count": raw_count,
+    }

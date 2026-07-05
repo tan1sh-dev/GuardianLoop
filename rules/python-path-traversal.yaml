@@ -13,3 +13,20 @@ rules:
           - pattern: open($FILE)
       - pattern-not: open("...", ...)
       - pattern-not: open("...")
+
+  # CWE-22: os.path.join with user-controlled component
+  - id: python-cwe22-path-join
+    languages: [python]
+    severity: WARNING
+    message: >
+      os.path.join() with a user-controlled path component allows path traversal.
+      An input like "../../../../etc/passwd" bypasses the intended base directory
+      (CWE-22). Resolve the final path with pathlib and verify it stays within
+      the allowed directory: Path(result).resolve().is_relative_to(base_dir).
+    metadata:
+      cwe: CWE-22
+      owasp: A01:2021
+    patterns:
+      - pattern: os.path.join($BASE, $USER_INPUT, ...)
+      - pattern-not: os.path.join("...", "...", ...)
+

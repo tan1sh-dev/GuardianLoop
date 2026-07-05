@@ -49,17 +49,17 @@ rules:
           ...
           free($PTR);
 
-  # CWE-401: malloc result used via arrow without a NULL check
-  - id: cpp-cwe401-malloc-no-null-check
+  # CWE-476: malloc result used via arrow without a NULL check
+  - id: cpp-cwe476-malloc-no-null-check
     languages: [c, cpp]
     severity: WARNING
     message: >
       The result of malloc() is dereferenced via -> without a NULL check.
       malloc() returns NULL on allocation failure; dereferencing NULL is
-      undefined behaviour and may be exploitable (CWE-401 / CWE-476).
+      undefined behaviour and may be exploitable (CWE-476).
       Always check: if (ptr == NULL) { /* handle */ }
     metadata:
-      cwe: CWE-401
+      cwe: CWE-476
       owasp: A03:2021
     pattern-either:
       - pattern: |
@@ -92,3 +92,56 @@ rules:
           free($PTR);
           ...
           $RET = $PTR->$FIELD;
+
+  # CWE-457: uninitialized buffer used as memcpy source
+  - id: cpp-cwe457-uninit-memcpy-source
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      A local buffer is declared and then immediately passed as the source
+      argument of memcpy() without being initialised. The destination will
+      receive whatever stale data was on the stack, potentially leaking
+      sensitive information (CWE-457). Initialise the buffer first with
+      memset(buf, 0, sizeof(buf)) or zero-initialise: char buf[N] = {0}.
+    metadata:
+      cwe: CWE-457
+      owasp: A03:2021
+    patterns:
+      - pattern: |
+          char $BUF[$SZ];
+          ...
+          memcpy($DST, $BUF, ...);
+      - pattern-not: |
+          char $BUF[$SZ];
+          ...
+          memset($BUF, ...);
+          ...
+          memcpy($DST, $BUF, ...);
+      - pattern-not: |
+          char $BUF[$SZ] = {0};
+          ...
+          memcpy($DST, $BUF, ...);
+
+  # CWE-457: uninitialized variable returned from function
+  - id: cpp-cwe457-uninit-return
+    languages: [c, cpp]
+    severity: WARNING
+    message: >
+      A local variable is declared but may not be initialised on all paths
+      before being returned. The caller receives indeterminate stack data,
+      which may leak secrets or cause downstream logic errors (CWE-457).
+      Always initialise local variables at the point of declaration.
+    metadata:
+      cwe: CWE-457
+      owasp: A03:2021
+    patterns:
+      - pattern: |
+          int $VAR;
+          ...
+          return $VAR;
+      - pattern-not: |
+          int $VAR;
+          ...
+          $VAR = ...;
+          ...
+          return $VAR;
